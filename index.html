@@ -688,7 +688,7 @@ tr.grp td{background:#eef2f7!important;font-weight:600;border-top:2px solid #cbd
       </div>
       <label style="display:flex;gap:7px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="spRest" checked> לפרוס רק את היתרה שעדיין לא מופיעה בתזרים</label>
       <div class="card" style="box-shadow:none;margin-top:14px">
-        <div class="card-h" style="padding:10px 13px"><h3 style="font-size:13.5px">מקדמה לספק / קבלן</h3><span class="hint">פעם אחת לכל גורם. גורם שכבר יש לו מקדמה בתזרים לא יקבל מקדמה נוספת.</span></div>
+        <div class="card-h" style="padding:10px 13px"><h3 style="font-size:13.5px">מקדמה לספק / קבלן</h3><span class="hint">פעם אחת לכל גורם. גורם שכבר יש לו מקדמה בתזרים לא יקבל מקדמה נוספת.</span><div class="spacer"></div><button class="btn sm danger" id="spAdvClear" style="display:none">✕ ביטול המקדמה</button></div>
         <div class="card-b" style="padding:13px">
           <div class="fields">
             <div><label class="f">מקדמה</label><select class="i" id="spAdvMode"><option value="none">ללא מקדמה</option><option value="pct">אחוז מהסכום</option><option value="fixed">סכום קבוע (₪)</option></select></div>
@@ -1115,13 +1115,13 @@ function renderChart(rows){
   const B=chartBasis;
   if(B==='forecast'||B==='both'){
     ds.push({type:'bar',label:'הכנסות צפוי',data:rows.map(r=>r.ei),backgroundColor:'#10b98199',borderColor:'#059669',borderWidth:1,order:3,yAxisID:'y'});
-    ds.push({type:'bar',label:'הוצאות צפוי',data:rows.map(r=>-r.ee),backgroundColor:'#f8717199',borderColor:'#dc2626',borderWidth:1,order:3,yAxisID:'y'});
+    ds.push({type:'bar',label:'הוצאות צפוי',data:rows.map(r=>r.ee),backgroundColor:'#ef4444cc',borderColor:'#dc2626',borderWidth:1,order:3,yAxisID:'y'});
     ds.push({type:'line',label:'יתרה מצטברת (צפוי)',data:rows.map(r=>r.cumF),borderColor:'#1d4ed8',backgroundColor:'#1d4ed822',borderWidth:2.5,tension:.25,fill:B!=='both',pointRadius:3,order:1,yAxisID:'y'});
   }
   if(B==='actual'||B==='both'){
     if(B==='actual'){
       ds.push({type:'bar',label:'הכנסות בפועל',data:rows.map(r=>r.ai),backgroundColor:'#10b98199',borderColor:'#059669',borderWidth:1,order:3,yAxisID:'y'});
-      ds.push({type:'bar',label:'הוצאות בפועל',data:rows.map(r=>-r.ae),backgroundColor:'#f8717199',borderColor:'#dc2626',borderWidth:1,order:3,yAxisID:'y'});
+      ds.push({type:'bar',label:'הוצאות בפועל',data:rows.map(r=>r.ae),backgroundColor:'#ef4444cc',borderColor:'#dc2626',borderWidth:1,order:3,yAxisID:'y'});
     }
     ds.push({type:'line',label:'יתרה מצטברת (בפועל)',data:rows.map(r=>r.cumA),borderColor:'#f59e0b',borderWidth:2.5,borderDash:B==='both'?[6,4]:[],tension:.25,fill:false,pointRadius:3,order:0,yAxisID:'y'});
   }
@@ -1524,14 +1524,16 @@ function openSpread(party){
   spreadParty=party===undefined?null:party;
   $('#spTitle').textContent=spreadParty===null?'פריסת התקציב לתזרים – כל הגורמים':'פריסה לתזרים – '+(spreadParty||'ללא קבלן/ספק משויך');
   if(!$('#spFrom').value){const d=new Date();$('#spFrom').value=S.settings.from||d.getFullYear()+'-'+pad(d.getMonth()+1);}
-  if(!$('#spAdvDate').value) $('#spAdvDate').value=$('#spFrom').value+'-01';
+  // המקדמה לא נשמרת בין פתיחות: כל פריסה מתחילה "ללא מקדמה"
+  $('#spAdvMode').value='none'; $('#spAdvVal').value=''; $('#spAdvOff').checked=true;
+  $('#spAdvDate').value=$('#spFrom').value+'-01';
   spreadPreview(); $('#ovSpread').classList.add('on');
 }
 function spreadPreview(){
   const plan=spreadPlan(), n=Math.max(1,Number($('#sprN').value)||1);
   const mode=$('#spAdvMode').value;
   $('#wrapAdvVal').style.display=mode==='none'?'none':''; $('#wrapAdvDate').style.display=mode==='none'?'none':'';
-  $('#wrapAdvOff').style.display=mode==='none'?'none':'flex';
+  $('#wrapAdvOff').style.display=mode==='none'?'none':'flex'; $('#spAdvClear').style.display=mode==='none'?'none':'';
   $('#lblAdvVal').textContent=mode==='pct'?'אחוז מהסכום (%)':'סכום המקדמה (₪)';
   const sp=plan.reduce((a,x)=>a+(x.spreadAmt>0.5?x.spreadAmt:0),0), adv=plan.reduce((a,x)=>a+x.adv,0);
   const nAdv=plan.filter(x=>x.adv>0).length, skip=plan.filter(x=>x.advSkip).map(x=>x.g.party||'ללא שיוך');
@@ -2942,6 +2944,7 @@ function bind(){
     const v=Number(el.value)||0; if(v)S.budgetCommit[el.dataset.commit]=v; else delete S.budgetCommit[el.dataset.commit]; save(); renderBudget();});
   $('#tBCtl').addEventListener('click',e=>{const b=e.target.closest('[data-bspread]');if(b)openSpread(b.dataset.bspread);});
   $('#bSpreadAll').onclick=()=>openSpread();
+  $('#spAdvClear').onclick=()=>{$('#spAdvMode').value='none';$('#spAdvVal').value='';spreadPreview();};
   ['#spFrom','#sprN','#spBase','#spRest','#spAdvMode','#spAdvVal','#spAdvDate','#spAdvOff'].forEach(x=>{$(x).addEventListener('change',spreadPreview);$(x).addEventListener('input',spreadPreview);});
   $('#spGo').onclick=doSpread;
   $('#btnSched').onclick=openSched;
