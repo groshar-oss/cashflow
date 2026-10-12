@@ -202,6 +202,7 @@ tr.grp td{background:#eef2f7!important;font-weight:600;border-top:2px solid #cbd
     <button class="btn sm" id="btnPrint">🖨️ הדפסה / PDF</button>
     <button class="btn sm" id="btnExport">⬇️ ייצוא CSV</button>
     <button class="btn sm" id="btnBackup">💾 גיבוי</button>
+    <button class="btn sm" id="btnAlerts" title="התראות חריגה">🔔 <span id="alCnt"></span></button>
     <button class="btn sm" id="btnDrive" title="Google Drive"><span class="dot" id="drvDot"></span> Drive</button>
   </div>
 </div>
@@ -224,6 +225,7 @@ tr.grp td{background:#eef2f7!important;font-weight:600;border-top:2px solid #cbd
   <section id="v-dash" class="grid">
     <div class="info" id="allBanner" style="display:none">תצוגה מאוחדת של כל הפרויקטים: ההכנסות, ההוצאות ויתרות הפתיחה מסוכמים יחד, וכל שורה מחושבת לפי תנאי התשלום של הפרויקט שלה. לעריכת נתונים בחרו פרויקט בודד.</div>
     <div class="kpis" id="kpis"></div>
+    <div class="card" id="alDash"></div>
     <div class="card" id="projSumCard" style="display:none">
       <div class="card-h"><h3>השוואת פרויקטים</h3><span class="hint">לחיצה על שם פרויקט פותחת אותו</span></div>
       <div class="tbl-scroll"><table class="t" id="tProjSum"></table></div>
@@ -370,6 +372,7 @@ tr.grp td{background:#eef2f7!important;font-weight:600;border-top:2px solid #cbd
         <div style="min-width:260px"><label class="f">דוח</label><select class="i" id="rpType"></select></div>
         <div style="min-width:220px"><label class="f">פרויקט</label><select class="i" id="rpProj"></select></div>
         <div id="rpMonthW"><label class="f" id="rpMonthL">חודש</label><div style="display:flex;gap:4px"><button class="btn sm" id="rpPrev" title="חודש קודם">›</button><input class="i" id="rpMonth" type="month" style="width:160px"><button class="btn sm" id="rpNext" title="חודש הבא">‹</button></div></div>
+        <div id="rpChgW" style="display:none"><label class="f">יומן מתאריך</label><input class="i" id="rpChgFrom" type="date" style="width:160px"></div>
         <div id="rpHorW" style="display:none"><label class="f">תקופה</label><select class="i" id="rpHor"><option value="3">3 חודשים</option><option value="6" selected>6 חודשים</option><option value="12">12 חודשים</option></select></div>
         <label id="rpOpenW" style="display:flex;gap:7px;align-items:center;font-size:13px;padding-bottom:8px"><input type="checkbox" id="rpOpen" checked> <span id="rpOpenL">כולל תשלומים פתוחים מחודשים קודמים</span></label>
         <div class="spacer"></div>
@@ -479,6 +482,7 @@ tr.grp td{background:#eef2f7!important;font-weight:600;border-top:2px solid #cbd
         </div>
         <div class="fields">
           <div><label class="f">מסגרת אשראי / רף התראה (₪)</label><input class="i num" id="sAlert" type="number" step="0.01"></div>
+          <div><label class="f">חריגה קריטית מעל (%)</label><input class="i num" id="sCrit" type="number" step="0.5" min="0" placeholder="15"></div>
           <div><label class="f">סכומים מוזנים כ-</label>
             <select class="i" id="sVatMode"><option value="net">ללא מע״מ</option><option value="gross">כולל מע״מ</option></select>
           </div>
@@ -649,6 +653,28 @@ tr.grp td{background:#eef2f7!important;font-weight:600;border-top:2px solid #cbd
       <div class="tbl-scroll"><table class="t" id="tDir"></table></div>
     </div>
     <div class="modal-f"><button class="btn pri" id="dirGo">שיוך לפרויקט</button><button class="btn" data-close>ביטול</button></div>
+  </div>
+</div>
+
+<!-- ============ ALERTS ============ -->
+<div class="ov" id="ovAlerts">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-h"><h3>🔔 התראות חריגה</h3><div class="spacer"></div><button class="x" data-close>✕</button></div>
+    <div class="modal-b grid" id="alBody" style="gap:10px"></div>
+    <div class="modal-f"><button class="btn" data-close>סגירה</button></div>
+  </div>
+</div>
+<div class="ov" id="ovAlChg">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-h"><h3>⚠ השינוי יצר חריגה</h3><div class="spacer"></div><button class="x" data-close>✕</button></div>
+    <div class="modal-b">
+      <div id="alcBody"></div>
+      <div class="fields" style="margin-top:12px">
+        <div><label class="f">סיבת השינוי</label><select class="i" id="alcWhy"></select></div>
+        <div><label class="f">הערה (מספר פקודת שינוי, הסבר)</label><input class="i" id="alcNote"></div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="btn pri" id="alcAck">✓ אישור החריגה</button><button class="btn" id="alcKeep">שמירה, ההתראה תישאר פתוחה</button><div class="spacer"></div><button class="btn ghost" id="alcBase" title="בזמן הזנת הנתונים הראשונית של פרויקט: המצב הנוכחי יהפוך לבסיס ולא תופיע התראה על השינוי">הזנה ראשונית – לעדכן את הבסיס</button></div>
   </div>
 </div>
 
@@ -910,7 +936,7 @@ function nextBucket(k){
 
 /* ---------- state ---------- */
 function blank(){
-  return {v:2,settings:{projectName:'',openingBalance:0,contractTotal:0,from:'',to:'',vat:18,vatMode:'net',alert:0,cats:DEF_CATS.slice()},
+  return {v:2,settings:{projectName:'',openingBalance:0,contractTotal:0,from:'',to:'',vat:18,vatMode:'net',alert:0,critPct:15,cats:DEF_CATS.slice()},
           clients:[],vendors:[],incomes:[],expenses:[],budget:[],budgetCommit:{}};
 }
 /* ---------- ריבוי פרויקטים ----------
@@ -944,9 +970,13 @@ function load(){
   }
   DB.projects.forEach(p=>{if(!p.id)p.id=uid();p.data=normalize(p.data);});
   if(!curP()) DB.current=DB.projects[0].id;
+  // התראות חריגה: בסיס וצילום מצב ראשוני לכל פרויקט שאין לו
+  let fresh=false;
+  DB.projects.forEach(p=>withProj(p,()=>{if(!S.alBase||!S.alSnap){fresh=true;alEnsure();if(!S.alSnap){S.alSnap=alSnapNow();S.alSnap.al=alPctMap();}}}));
+  if(fresh) persist(true);
   ALL=false; S=curP().data;
 }
-function save(){ if(ALL) return; const p=curP(); if(p) p.data=S; persist(); }
+function save(){ if(ALL) return; const p=curP(); if(p) p.data=S; const ch=alTrack(); persist(); if(ch) setTimeout(()=>alPopup(ch),30); }
 
 function buildVirtual(){
   const V=blank(), keep=S, cats=new Set(), cl={}, vn={};
@@ -1426,7 +1456,7 @@ function render(){
   const rows=compute();
   renderKpis(rows); renderFlow(rows); renderChart(rows); renderCats(); renderPartyExposure();
   renderRows('income'); renderRows('expense'); renderParties(); renderContract();
-  renderProjSel(); renderProjSum(); renderBudget();
+  renderProjSel(); renderProjSum(); renderBudget(); alUI();
   rpSyncProj(); if($('#v-reports').style.display!=='none') renderReport();
   $('#cIn').textContent=S.incomes.length; $('#cOut').textContent=S.expenses.length;
   $('#cP').textContent=S.vendors.length; $('#cCl').textContent=S.clients.length; drvUI();
@@ -1441,7 +1471,7 @@ function syncSettingsUI(){
   const s=S.settings;
   $('#projName').value=s.projectName||''; $('#sOpen').value=s.openingBalance||0; $('#sContract').value=s.contractTotal||'';
   $('#sFrom').value=s.from||''; $('#sTo').value=s.to||''; $('#sVat').value=s.vat??18;
-  $('#sAlert').value=s.alert||0; $('#sVatMode').value=s.vatMode||'net';
+  $('#sAlert').value=s.alert||0; $('#sCrit').value=s.critPct||15; $('#sVatMode').value=s.vatMode||'net';
 }
 
 /* =================== תקציב ובקרה =================== */
@@ -1581,6 +1611,7 @@ function renderBudget(){
   $('#bKpis').innerHTML=B.length?k.map(x=>`<div class="kpi ${x.c}"><div class="lbl">${esc(x.l)}</div><div class="val num">${esc(x.v)}</div><div class="foot">${esc(x.f)}</div></div>`).join(''):'';
 
   // ---- control table
+  const ALM=new Map(alList().open.map(a=>[a.key,a]));
   const budNames=new Set(P.map(g=>g.party));
   const unEx=S.expenses.filter(r=>!budNames.has(r.party||'')&&r.status!=='בוטל');
   $('#tBCtl').innerHTML=!B.length?'<tbody><tr><td><div class="empty"><div class="big">📋</div>עדיין לא הועלה תקציב לפרויקט. העלו קובץ Excel של התקציב / ניתוח העלויות, או הוסיפו סעיפים ידנית.</div></td></tr></tbody>':
@@ -1595,7 +1626,7 @@ function renderBudget(){
         <td class="num">${g.forecast?money(g.forecast):'<span class="mut">—</span>'}</td><td class="num">${g.actual?money(g.actual):'<span class="mut">—</span>'}</td>
         <td class="num ${rest<0?'neg':'pos'}"><b>${money(rest)}</b></td>
         <td style="min-width:90px"><div class="bar"><i style="width:${Math.min(100,use)}%;${use>100?'background:var(--neg)':''}"></i></div><span class="mut" style="font-size:11px">${Math.round(use)}%</span></td>
-        <td>${st}</td><td><button class="btn sm" data-bspread="${esc(g.party)}">פריסה</button></td></tr>`;}).join('')+
+        <td>${st}${ALM.has('p:'+g.party)?' '+alChip(ALM.get('p:'+g.party)):''}</td><td><button class="btn sm" data-bspread="${esc(g.party)}">פריסה</button></td></tr>`;}).join('')+
     (unEx.length?`<tr><td><span class="mut">הוצאות בתזרים ללא סעיף תקציב</span></td><td class="mut" style="white-space:normal">${esc([...new Set(unEx.map(r=>r.party||'ללא שיוך'))].slice(0,4).join(', '))}${new Set(unEx.map(r=>r.party)).size>4?'…':''}</td><td class="num">—</td><td></td><td></td>
       <td class="num">${money(unEx.reduce((a,r)=>a+(Number(r.amount)||0),0))}</td><td class="num">${money(unEx.reduce((a,r)=>a+(Number(r.actualAmount)||0),0))}</td><td></td><td></td><td><span class="chip y">ללא תקציב</span></td><td></td></tr>`:'')+
     `</tbody><tfoot><tr><td colspan="2">סה״כ</td><td class="num">${money(tb)}</td><td class="num">${ts?money(ts):''}</td><td class="num">${money(tc)}</td><td class="num">${money(tf)}</td><td class="num">${money(ta)}</td><td class="num">${money(tb-P.reduce((a,g)=>a+Math.max(g.commit,g.forecast),0))}</td><td colspan="3"></td></tr></tfoot>`;
@@ -2876,8 +2907,259 @@ function demo(){
   toast('נתוני הדמו נטענו – שימו לב לבור המזומנים שנוצר מהפער בין שוטף+60 בהכנסות לשוטף+30 בחומרים',5000);
 }
 
+/* =================== התראות חריגה =================== */
+/* בסיס מאושר (alBase), צילום מצב אחרון (alSnap), יומן שינויים (alLog) ואישורי חריגה (alAck) – נשמרים בתוך נתוני הפרויקט */
+const AL_TOT='__total';
+const AL_REASONS={chg:'שינוי לעומת הבסיס',com:'צפי בתזרים מעל ההתקשרות',bud:'מעל התקציב',paid:'שולם מעל ההתקשרות',nob:'הוצאה ללא סעיף תקציב',neu:'ספק חדש שלא היה בבסיס',
+  tchg:'עלות הפרויקט לעומת הבסיס',tbud:'עלות הפרויקט מעל התקציב',tcon:'עלות הפרויקט מעל סכום החוזה',cash:'יתרת מזומנים'};
+const AL_WHY=['','חשבון חריגים','תוספת / פקודת שינוי','עדכון מחיר','הנחה / קיזוז','ביטול עבודה','תיקון טעות','אחר'];
+function alCrit(){return Number(S.settings.critPct)>0?Number(S.settings.critPct):15;}
+/* צבע לפי אחוז החריגה: עד 3% צהוב, 3–5% כתום, 5–10% אדום, מעל 10% אדום שמתכהה ככל שהאחוז עולה */
+function alLevel(pct){return pct==null?'r':pct<=3?'y':pct<=5?'o':pct<=10?'r':'R';}
+function alStyle(pct,crit){
+  if(pct==null) return crit?'background:#7f1d1d;color:#fff':'background:#fee2e2;color:#b91c1c';
+  if(pct<=3) return 'background:#fef9c3;color:#854d0e';
+  if(pct<=5) return 'background:#ffedd5;color:#9a3412';
+  if(pct<=10) return 'background:#fee2e2;color:#b91c1c';
+  const t=Math.min(1,(pct-10)/40), mix=(a,b)=>Math.round(a+(b-a)*t);
+  return `background:rgb(${mix(248,92)},${mix(113,16)},${mix(113,16)});color:#fff`;
+}
+function alChip(a){
+  const txt=a.pct==null?(a.crit?'קריטי':'חריגה'):(a.pct>=100&&a.reasons.some(r=>r.k==='nob')?'ללא תקציב':'+'+fmtPct(a.pct));
+  return `<span class="chip" style="${alStyle(a.pct,a.crit)};font-weight:700${a.crit?';box-shadow:0 0 0 2px #7f1d1d':''}">${a.crit&&a.pct!=null?'⚠ קריטי · ':''}${esc(txt)}</span>`;
+}
+/* מצב נוכחי לכל ספק / קבלן: צפי בתזרים, התקשרות, תקציב, שולם */
+function alState(){
+  const P={}, g=n=>P[n]||(P[n]={f:0,c:0,b:0,p:0});
+  S.expenses.forEach(r=>{const n=(r.party||'').trim()||'ללא שיוך'; if(r.status==='בוטל') {g(n);return;}
+    g(n).f+=Number(r.amount)||0; g(n).p+=Number(r.actualAmount)||0;});
+  S.budget.forEach(i=>{const n=(i.party||'').trim(); if(n) g(n).b+=Number(i.total)||0;});
+  Object.entries(S.budgetCommit||{}).forEach(([n,v])=>{if(n) g(n).c=Number(v)||0;});
+  Object.values(P).forEach(x=>{x.f=r2(x.f);x.b=r2(x.b);x.p=r2(x.p);});
+  const T={f:0,b:0,c:0,p:0}; Object.values(P).forEach(x=>{T.f+=x.f;T.b+=x.b;T.c+=x.c;T.p+=x.p;});
+  return {P,T:{f:r2(T.f),b:r2(T.b),c:r2(T.c),p:r2(T.p)}};
+}
+function alSnapNow(){
+  const rows={}; S.expenses.forEach(r=>{rows[r.id]={p:(r.party||'').trim()||'ללא שיוך',a:r.status==='בוטל'?0:Number(r.amount)||0,x:Number(r.actualAmount)||0,d:r.desc||''};});
+  const st=alState(), bud={}; Object.entries(st.P).forEach(([n,x])=>{if(x.b)bud[n]=x.b;});
+  return {rows,commit:Object.assign({},S.budgetCommit||{}),bud};
+}
+function alSetBase(){
+  const st=alState(); S.alBase={at:Date.now(),P:{},T:st.T};
+  Object.entries(st.P).forEach(([n,x])=>{S.alBase.P[n]={f:x.f,c:x.c,b:x.b};});
+}
+function alEnsure(){
+  if(!S.alBase) alSetBase();
+  if(!Array.isArray(S.alLog)) S.alLog=[];
+  if(!S.alAck||typeof S.alAck!=='object') S.alAck={};
+}
+/* רשימת החריגות של הפרויקט הנוכחי (S) */
+function alList(){
+  alEnsure();
+  const st=alState(), B=S.alBase, crit=alCrit(), out=[], sav=[];
+  const pc=(a,b)=>b?r2((a-b)/b*100):null, R=(k,from,to,label)=>({k,from:r2(from),to:r2(to),diff:r2(to-from),pct:pc(to,from),label:label||AL_REASONS[k]});
+  const hasBud=S.budget.length>0;
+  Object.entries(st.P).forEach(([n,x])=>{
+    const bs=B.P[n], rs=[];
+    if(bs&&bs.f>0&&Math.abs(x.f-bs.f)>0.5){ if(x.f>bs.f) rs.push(R('chg',bs.f,x.f,'צפי בתזרים לעומת הבסיס')); else sav.push({party:n,...R('chg',bs.f,x.f,'ירידה לעומת הבסיס')}); }
+    if(x.c>0&&x.f>x.c+0.5) rs.push(R('com',x.c,x.f));
+    if(x.b>0&&Math.max(x.c,x.f)>x.b+0.5) rs.push(R('bud',x.b,Math.max(x.c,x.f),x.c>x.f?'התקשרות מעל התקציב':'צפי בתזרים מעל התקציב'));
+    const ref=x.c>0?x.c:x.f; if(x.p>0&&ref>0&&x.p>ref+0.5) rs.push(R('paid',ref,x.p,x.c>0?'שולם מעל ההתקשרות':'שולם מעל הצפי בתזרים'));
+    if(hasBud&&!x.b&&x.f>0.5) rs.push({k:'nob',from:0,to:x.f,diff:x.f,pct:100,label:AL_REASONS.nob});
+    else if(!hasBud&&!bs&&x.f>0.5&&B.T.f>0) rs.push({k:'neu',from:0,to:x.f,diff:x.f,pct:r2(x.f/B.T.f*100),label:AL_REASONS.neu+' (מתוך עלות הבסיס)'});
+    if(rs.length) out.push({key:'p:'+n,party:n,reasons:rs});
+  });
+  // הפרויקט כולו
+  const T=st.T, trs=[], ref=Object.values(st.P).reduce((a,x)=>a+Math.max(x.c,x.f),0);
+  if(B.T.f>0&&T.f>B.T.f+0.5) trs.push(R('tchg',B.T.f,T.f));
+  if(T.b>0&&ref>T.b+0.5) trs.push(R('tbud',T.b,ref,'התקשרויות וצפי מעל התקציב הכולל'));
+  const C=Number(S.settings.contractTotal)||0; if(C>0&&T.f>C+0.5) trs.push(R('tcon',C,T.f));
+  if(trs.length) out.push({key:AL_TOT,party:'הפרויקט כולו',reasons:trs});
+  // יתרת מזומנים: החודש הראשון מהיום והלאה שיורד מתחת לרף או מתחת לאפס
+  const lim=Number(S.settings.alert)||0, nowK=bucketKey(new Date(),'m');
+  const bad=compute('m').find(r=>r.k>=nowK&&(r.cumF<0||(lim&&r.cumF<lim)));
+  if(bad) out.push({key:'cash',party:'תזרים מזומנים',cash:true,reasons:[{k:'cash',from:lim,to:r2(bad.cumF),diff:r2(bad.cumF-lim),pct:null,
+    label:(bad.cumF<0?'יתרה שלילית':'יתרה מתחת לרף ההתראה')+' ב-'+bucketLabel(bad.k)}],critCash:bad.cumF<0});
+  out.forEach(a=>{
+    const ps=a.reasons.map(r=>r.pct).filter(v=>v!=null); a.pct=ps.length?Math.max(...ps):null;
+    a.crit=a.cash?!!a.critCash:a.pct>=crit; a.diff=Math.max(...a.reasons.map(r=>r.diff));
+    const ack=S.alAck[a.key];
+    a.acked=!!ack&&a.reasons.every(r=>ack.pcts&&ack.pcts[r.k]!=null&&(r.pct==null?r.to>=ack.pcts[r.k]-0.5:r.pct<=ack.pcts[r.k]+0.05));
+    a.ack=ack||null;
+  });
+  out.sort((a,b)=>(a.acked-b.acked)||(b.crit-a.crit)||((b.pct??999)-(a.pct??999)));
+  return {list:out,open:out.filter(a=>!a.acked),sav};
+}
+/* בכל שמירה: השוואה לצילום המצב הקודם ורישום ביומן. מחזיר את השינויים ואת החריגות שנוצרו או גדלו */
+function alTrack(){
+  if(ALL) return null;
+  alEnsure();
+  const now=alSnapNow(), old=S.alSnap;
+  const beforeAl=old&&old.al||{};
+  S.alSnap=now;
+  if(!old){ S.alSnap.al=alPctMap(); return null; }
+  const at=Date.now(), b=uid(), items=[], add=(o)=>items.push(Object.assign({id:uid(),b,at},o));
+  const ids=new Set([...Object.keys(old.rows),...Object.keys(now.rows)]);
+  ids.forEach(id=>{
+    const o=old.rows[id], n=now.rows[id];
+    if(o&&n&&o.p===n.p){
+      if(Math.abs(o.a-n.a)>0.005) add({t:'row',party:n.p,desc:n.d,from:o.a,to:n.a});
+      if(Math.abs(o.x-n.x)>0.005) add({t:'pay',party:n.p,desc:n.d,from:o.x,to:n.x});
+    }else{
+      if(o&&(o.a||o.x)) add({t:n?'move':'del',party:o.p,desc:o.d+(n?' (הועבר ל'+n.p+')':''),from:o.a,to:0});
+      if(n&&(n.a||n.x)) add({t:o?'move':'add',party:n.p,desc:n.d+(o?' (הועבר מ'+o.p+')':''),from:0,to:n.a});
+    }
+  });
+  new Set([...Object.keys(old.commit||{}),...Object.keys(now.commit)]).forEach(n=>{const f=Number(old.commit[n])||0,t=Number(now.commit[n])||0;if(Math.abs(f-t)>0.005)add({t:'commit',party:n,desc:'התקשרות',from:f,to:t});});
+  new Set([...Object.keys(old.bud||{}),...Object.keys(now.bud)]).forEach(n=>{const f=Number(old.bud[n])||0,t=Number(now.bud[n])||0;if(Math.abs(f-t)>0.005)add({t:'budget',party:n,desc:'תקציב',from:f,to:t});});
+  const al=alPctMap(); S.alSnap.al=al;
+  if(!items.length) return null;
+  S.alLog.push(...items); if(S.alLog.length>3000) S.alLog=S.alLog.slice(-3000);
+  const L=alList(), grown=L.open.filter(a=>beforeAl[a.key]==null||(a.pct??0)>(beforeAl[a.key]??0)+0.05||(a.cash&&beforeAl[a.key]==null));
+  return grown.length?{b,items,grown}:null;
+}
+function alPctMap(){const m={}; alList().open.forEach(a=>{m[a.key]=a.pct??0;}); return m;}
+function alAckOne(a,note,why){
+  const pcts={}; a.reasons.forEach(r=>{pcts[r.k]=r.pct==null?r.to:r.pct;});
+  S.alAck[a.key]={pcts,at:Date.now(),note:note||'',why:why||''};
+}
+const AL_T={row:'שינוי סכום',add:'שורה חדשה',del:'שורה נמחקה',move:'העברת שורה',pay:'תשלום בפועל',commit:'התקשרות',budget:'תקציב'};
+
+/* ---------- ממשק: פעמון, חלון התראות, חלון אחרי שמירה, כרטיס בדשבורד ---------- */
+function alAll(){ // לכל הפרויקטים (לתצוגה המאוחדת)
+  return DB.projects.map(p=>({p,L:withProj(p,()=>alList())}));
+}
+function alUI(){
+  const btn=$('#btnAlerts'); if(!btn) return;
+  const sets=ALL?alAll():[{p:curP(),L:alList()}];
+  const open=sets.flatMap(s=>s.L.open), n=open.length;
+  const top=open.slice().sort((a,b)=>(b.crit-a.crit)||((b.pct??999)-(a.pct??999)))[0];
+  $('#alCnt').textContent=n||''; $('#alCnt').style.cssText=n?alStyle(top.pct,top.crit)+';border-radius:9px;padding:0 6px;font-weight:700':'display:none';
+  btn.title=n?n+' חריגות פתוחות':'אין חריגות פתוחות';
+  // כרטיס בדשבורד
+  const box=$('#alDash'); if(!box) return;
+  const crit=open.filter(a=>a.crit).length;
+  box.innerHTML=`<div class="card-h"><h3>🔔 חריגות ושינויים</h3>
+      <span class="hint">${n?n+' פתוחות'+(crit?' · '+crit+' קריטיות':''):'אין חריגות פתוחות'}</span><div class="spacer"></div>
+      <button class="btn sm" data-alopen>כל ההתראות</button><button class="btn sm" data-algo-rep>דוח חריגות</button></div>
+    <div class="card-b" style="display:grid;gap:7px">${n?sets.flatMap(s=>s.L.open.map(a=>({a,p:s.p}))).slice(0,6).map(({a,p})=>alRowHtml(a,ALL?pname(p):'',true)).join(''):
+      '<div class="mut" style="font-size:13px">כל העלויות בתוך ההתקשרויות והתקציב, וללא שינוי לעומת הבסיס.</div>'}
+      ${n>6?`<div class="mut" style="font-size:12px">ועוד ${n-6} התראות…</div>`:''}</div>`;
+}
+function alRowHtml(a,proj,brief,pid){
+  const rs=a.reasons.map(r=>`<div style="font-size:12.5px">${esc(r.label)}: ${r.k==='cash'?`<b>${money(r.to)}</b>${r.from?' (רף '+money(r.from)+')':''}`:
+    `${money(r.from)} ← <b>${money(r.to)}</b> <span class="mut">(${r.diff>=0?'+':''}${money(r.diff)}${r.pct!=null&&r.k!=='nob'?' · '+(r.pct>=0?'+':'')+fmtPct(r.pct):''})</span>`}</div>`).join('');
+  const ack=a.ack&&a.acked?`<div class="mut" style="font-size:11.5px">✓ אושר ${new Date(a.ack.at).toLocaleDateString('he-IL')}${a.ack.why?' · '+esc(a.ack.why):''}${a.ack.note?' · '+esc(a.ack.note):''}</div>`:'';
+  const btns=brief?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${a.acked?'':`<button class="btn sm" data-alack="${esc(a.key)}" data-pid="${pid||''}">✓ אישור חריגה</button>`}
+     ${!a.acked&&a.reasons.some(r=>r.k==='com')?`<button class="btn sm" data-alcom="${esc(a.key)}" data-pid="${pid||''}" title="ההתקשרות תעודכן לסכום הצפוי בתזרים">אישור ועדכון ההתקשרות</button>`:''}</div>`;
+  return `<div style="border:1px solid var(--line);border-inline-start:5px solid ${a.acked?'#94a3b8':(alStyle(a.pct,a.crit).match(/background:([^;]+)/)||[])[1]};border-radius:10px;padding:8px 11px;${a.acked?'opacity:.75':''}">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(a.party)}</b>${proj?`<span class="chip xs">${esc(proj)}</span>`:''}${alChip(a)}</div>${rs}${ack}${btns}</div>`;
+}
+function openAlerts(){
+  const sets=ALL?alAll():[{p:curP(),L:alList()}];
+  const base=ALL?'':`<div class="info" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">בסיס להשוואה: ${new Date(S.alBase.at).toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'})} · עלות בבסיס ${money(S.alBase.T.f)}
+      <div class="spacer"></div><button class="btn sm" id="alRebase">קביעת המצב הנוכחי כבסיס</button></div>`;
+  const legend=`<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;align-items:center"><span class="mut">מקרא:</span>
+    <span class="chip" style="${alStyle(2)}">עד 3%</span><span class="chip" style="${alStyle(4)}">3%–5%</span><span class="chip" style="${alStyle(8)}">5%–10%</span>
+    <span class="chip" style="${alStyle(20)}">מעל 10%, כהה יותר ככל שעולה</span><span class="chip" style="${alStyle(30,true)};box-shadow:0 0 0 2px #7f1d1d">⚠ קריטי מ-${fmtPct(ALL?15:alCrit())}</span></div>`;
+  const sec=(t,L,pid,proj)=>L.length?`<h4 style="margin:8px 0 4px">${t}</h4><div style="display:grid;gap:7px">${L.map(a=>alRowHtml(a,proj,false,pid)).join('')}</div>`:'';
+  const body=sets.map(({p,L})=>{
+    const proj=ALL?pname(p):'';
+    return (ALL?`<h3 style="margin:14px 0 2px">${esc(pname(p))}</h3>`:'')+
+      (L.open.length?sec('פתוחות ('+L.open.length+')',L.open,p.id,''):`<div class="mut" style="padding:6px 0">אין חריגות פתוחות.</div>`)+
+      (L.sav.length?`<h4 style="margin:10px 0 4px">ירידה בעלויות לעומת הבסיס</h4>`+L.sav.map(s=>`<div style="font-size:12.5px">🟢 <b>${esc(s.party)}</b>: ${money(s.from)} ← ${money(s.to)} <span class="pos">(${money(s.diff)} · ${fmtPct(s.pct)})</span></div>`).join(''):'')+
+      (L.list.some(a=>a.acked)?`<details style="margin-top:8px"><summary class="mut" style="cursor:pointer">חריגות שאושרו (${L.list.filter(a=>a.acked).length})</summary><div style="display:grid;gap:7px;margin-top:6px">${L.list.filter(a=>a.acked).map(a=>alRowHtml(a,'',false,p.id)).join('')}</div></details>`:'');
+  }).join('');
+  $('#alBody').innerHTML=base+legend+body;
+  $('#ovAlerts').classList.add('on');
+}
+function alProj(pid){return DB.projects.find(p=>p.id===pid)||curP();}
+function alDo(pid,fn){ // פעולה על פרויקט (גם מהתצוגה המאוחדת)
+  const p=alProj(pid);
+  if(!ALL&&p.id===DB.current){fn();save();render();}
+  else{withProj(p,fn);persist();if(ALL)S=buildVirtual();render();}
+}
+function alAckPrompt(pid,key,updCommit){
+  const p=alProj(pid), a=withProj(p,()=>alList().list.find(x=>x.key===key)); if(!a) return;
+  const note=prompt('הערה לאישור החריגה (לא חובה), למשל מספר פקודת שינוי:','');
+  if(note===null) return;
+  alDo(pid,()=>{
+    if(updCommit){const r=a.reasons.find(x=>x.k==='com'); if(r) S.budgetCommit[a.party]=r.to;}
+    const b=withProj(alProj(pid),()=>alList().list.find(x=>x.key===key))||a; // אחרי עדכון ההתקשרות
+    if(b.reasons.length) alAckOne(b,note,updCommit?'עדכון התקשרות':''); else delete S.alAck[key];
+  });
+  toast(updCommit?'ההתקשרות עודכנה והחריגה אושרה':'החריגה אושרה'); openAlerts();
+}
+/* חלון אחרי שמירה שיצרה חריגה חדשה או הגדילה חריגה קיימת */
+let ALPOP=null;
+function alPopup(r){
+  if(!r||$('#ovAlChg').classList.contains('on')&&ALPOP&&ALPOP.b===r.b) return;
+  ALPOP=r;
+  const items=r.items.slice(0,12);
+  $('#alcBody').innerHTML=`<div style="display:grid;gap:7px">${r.grown.map(a=>alRowHtml(a,'',true)).join('')}</div>
+    <h4 style="margin:12px 0 4px">מה השתנה</h4>
+    <table class="t" style="font-size:12.5px"><thead><tr><th>ספק / קבלן</th><th>פריט</th><th>סוג</th><th class="num">לפני</th><th class="num">אחרי</th><th class="num">הפרש</th></tr></thead><tbody>
+    ${items.map(i=>`<tr><td>${esc(i.party)}</td><td>${esc(i.desc)}</td><td>${AL_T[i.t]||''}</td><td class="num">${money(i.from)}</td><td class="num">${money(i.to)}</td><td class="num ${i.to-i.from>0?'neg':'pos'}">${i.to-i.from>0?'+':''}${money(i.to-i.from)}</td></tr>`).join('')}
+    ${r.items.length>12?`<tr><td colspan="6" class="mut">ועוד ${r.items.length-12} שינויים (בדוח "חריגות ושינויים")</td></tr>`:''}</tbody></table>`;
+  $('#alcWhy').innerHTML=AL_WHY.map(w=>`<option value="${w}">${w||'— סיבת השינוי (לא חובה) —'}</option>`).join('');
+  $('#alcNote').value='';
+  $('#ovAlChg').classList.add('on');
+}
+function alPopClose(ack){
+  const r=ALPOP; if(!r) return closeOv($('#ovAlChg'));
+  const why=$('#alcWhy').value, note=$('#alcNote').value.trim();
+  S.alLog.forEach(i=>{if(i.b===r.b){if(why)i.why=why;if(note)i.note=note;}});
+  if(ack){const L=alList(); r.grown.forEach(g=>{const a=L.list.find(x=>x.key===g.key); if(a) alAckOne(a,note,why);});}
+  ALPOP=null; $('#ovAlChg').classList.remove('on'); save(); render();
+  if(ack) toast('החריגה אושרה ונרשמה ביומן');
+}
+function bindAlerts(){
+  $('#btnAlerts').onclick=openAlerts;
+  $('#ovAlerts').addEventListener('click',e=>{
+    const k=e.target.closest('[data-alack]'); if(k) return alAckPrompt(k.dataset.pid,k.dataset.alack,false);
+    const c=e.target.closest('[data-alcom]'); if(c) return alAckPrompt(c.dataset.pid,c.dataset.alcom,true);
+    if(e.target.closest('#alRebase')){ if(!confirm('לקבוע את המצב הנוכחי כבסיס חדש? מעכשיו השינויים יחושבו לעומתו. יומן השינויים נשמר.')) return;
+      alSetBase(); Object.keys(S.alAck).forEach(k=>{const a=S.alAck[k];if(a.pcts){delete a.pcts.chg;delete a.pcts.tchg;delete a.pcts.neu;}});
+      S.alLog.push({id:uid(),b:uid(),at:Date.now(),t:'base',party:'',desc:'נקבע בסיס חדש',from:0,to:S.alBase.T.f});
+      save(); render(); openAlerts(); toast('נקבע בסיס חדש'); }
+  });
+  $('#v-dash').addEventListener('click',e=>{
+    if(e.target.closest('[data-alopen]')) openAlerts();
+    if(e.target.closest('[data-algo-rep]')){go('reports');$('#rpType').value='chg';renderReport();}
+  });
+  $('#alcAck').onclick=()=>alPopClose(true);
+  $('#alcKeep').onclick=()=>alPopClose(false);
+  $('#alcBase').onclick=()=>{ALPOP=null;$('#ovAlChg').classList.remove('on');alSetBase();
+    S.alLog.push({id:uid(),b:uid(),at:Date.now(),t:'base',party:'',desc:'נקבע בסיס חדש (הזנה ראשונית)',from:0,to:S.alBase.T.f});save();render();toast('הבסיס עודכן למצב הנוכחי');};
+}
+
+/* דוח חריגות ושינויים */
+function rpChg(){
+  const scope=rpScope(), multi=scope.length>1, open=[], acked=[], log=[];
+  const from=$('#rpChgFrom').value||'';
+  scope.forEach(pr=>withProj(pr,()=>{
+    const L=alList(), proj=pname(pr);
+    L.list.forEach(a=>a.reasons.forEach(r=>{
+      const row={proj,date:a.acked?fmtD(new Date(a.ack.at)):'',party:a.party,what:r.label,from:r.from,to:r.to,diff:r.diff,pct:r.k==='nob'||r.pct==null?'':r.pct,
+        lvl:a.acked?'אושר':a.crit?'קריטי':({y:'צהוב',o:'כתום',r:'אדום',R:'אדום חזק'})[alLevel(r.pct)],note:a.acked?[a.ack.why,a.ack.note].filter(Boolean).join(' · '):'',_late:!a.acked&&a.crit};
+      (a.acked?acked:open).push(row);}));
+    (S.alLog||[]).filter(i=>!from||new Date(i.at).toISOString().slice(0,10)>=from).forEach(i=>log.push({proj,_at:i.at,date:new Date(i.at).toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'}),party:i.party,
+      what:(AL_T[i.t]||'בסיס')+(i.desc&&i.desc!==AL_T[i.t]?' – '+i.desc:''),from:i.t==='base'?'':i.from,to:i.to,diff:i.t==='base'?'':r2(i.to-i.from),pct:i.from&&i.t!=='base'?r2((i.to-i.from)/i.from*100):'',lvl:'',note:[i.why,i.note].filter(Boolean).join(' · ')}));
+  }));
+  log.sort((a,b)=>b._at-a._at);
+  const groups=[{title:'חריגות פתוחות',info:'',rows:open},{title:'חריגות שאושרו',info:'',rows:acked},{title:'יומן שינויים'+(from?' מ-'+fmtD(from):''),info:'',rows:log}].filter(g=>g.rows.length);
+  const up=log.filter(r=>r.diff>0).reduce((a,r)=>a+r.diff,0), dn=log.filter(r=>r.diff<0).reduce((a,r)=>a+r.diff,0);
+  return {title:'דוח חריגות ושינויים – נכון ל-'+fmtD(new Date()),
+    cols:[...(multi?[['proj','פרויקט']]:[]),['date','תאריך'],['party','ספק / קבלן'],['what','פירוט'],['from','לפני / ייחוס','m'],['to','אחרי / נוכחי','m'],['diff','הפרש','m'],['pct','%','pct'],['lvl','רמה'],['note','סיבה / הערה']],
+    groups,sumCols:[],
+    kpis:[['חריגות פתוחות',String(new Set(open.map(r=>r.proj+r.party)).size)],['מתוכן קריטיות',String(new Set(open.filter(r=>r._late).map(r=>r.proj+r.party)).size)],['חריגות שאושרו',String(new Set(acked.map(r=>r.proj+r.party)).size)],
+      ['שינויים ביומן',String(log.length)],['סה״כ תוספות',money(up)],['סה״כ הפחתות',money(dn)]],
+    empty:'אין חריגות ואין שינויים ביומן בפרויקטים שנבחרו.',
+    note:'חריגה נמדדת לכל ספק / קבלן: צפי בתזרים לעומת הבסיס, צפי מעל ההתקשרות, התקשרות או צפי מעל התקציב, ותשלום בפועל מעל ההתקשרות. צבעים: עד 3% צהוב, 3%–5% כתום, 5%–10% אדום, מעל 10% אדום שמתכהה ככל שהאחוז עולה. מעל האחוז שהוגדר בהגדרות החריגה קריטית. יומן השינויים נרשם בכל שמירה ומשווה למצב הקודם.'};
+}
+
 /* =================== דוחות =================== */
-const RP_TYPES=[['pay','תשלומים חודשי לספקים וקבלנים'],['inc','הכנסות חודשי (גבייה מלקוחות)'],['late','גבייה באיחור (חשבונות שמועדם עבר)'],['bal','יתרות לספקים וקבלנים'],['fc','תחזית מזומנים (3 / 6 / 12 חודשים)'],['ret','עיכבונות וערבויות'],['bud','בקרת תקציב לפי מלאכה וקבלן']];
+const RP_TYPES=[['pay','תשלומים חודשי לספקים וקבלנים'],['inc','הכנסות חודשי (גבייה מלקוחות)'],['late','גבייה באיחור (חשבונות שמועדם עבר)'],['bal','יתרות לספקים וקבלנים'],['fc','תחזית מזומנים (3 / 6 / 12 חודשים)'],['ret','עיכבונות וערבויות'],['bud','בקרת תקציב לפי מלאכה וקבלן'],['chg','חריגות ושינויים (התראות ויומן)']];
 let RPT=null; // הדוח האחרון שהוצג (לייצוא)
 function withProj(p,fn){const keep=S;S=p.data;try{return fn();}finally{S=keep;}}
 function rpScope(){const v=$('#rpProj').value;return v==='__all'?DB.projects.slice():DB.projects.filter(p=>p.id===v);}
@@ -3079,10 +3361,10 @@ function cellTxt(c,v){
 function renderReport(){
   if(!$('#rpType')) return;
   const t=$('#rpType').value, monthly=t==='pay'||t==='inc';
-  $('#rpMonthW').style.display=monthly||t==='fc'?'':'none'; $('#rpOpenW').style.display=monthly?'flex':'none'; $('#rpHorW').style.display=t==='fc'?'':'none';
+  $('#rpMonthW').style.display=monthly||t==='fc'?'':'none'; $('#rpOpenW').style.display=monthly?'flex':'none'; $('#rpHorW').style.display=t==='fc'?'':'none'; $('#rpChgW').style.display=t==='chg'?'':'none';
   $('#rpMonthL').textContent=t==='fc'?'מחודש':'חודש';
   $('#rpOpenL').textContent=t==='inc'?'כולל חשבונות פתוחים שמועד הגבייה שלהם עבר':'כולל תשלומים פתוחים מחודשים קודמים';
-  const R=t==='pay'?rpMonthly('expense'):t==='inc'?rpMonthly('income'):t==='late'?rpLate():t==='fc'?rpForecast():t==='ret'?rpRet():t==='bud'?rpBud():rpBal();
+  const R=t==='pay'?rpMonthly('expense'):t==='inc'?rpMonthly('income'):t==='late'?rpLate():t==='fc'?rpForecast():t==='ret'?rpRet():t==='bud'?rpBud():t==='chg'?rpChg():rpBal();
   const scope=rpScope(); R.sub=(scope.length>1?'כל הפרויקטים ('+scope.length+')':pname(scope[0]))+' · הופק ב-'+new Date().toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'});
   RPT=R;
   const nc=R.cols.length, sumOf=(rows,c)=>R.sumCols.includes(c[0])?cellTxt(c,r2(sumK(rows,c[0]))):'';
@@ -3090,14 +3372,14 @@ function renderReport(){
   R.groups.forEach(g=>{
     if(g.title||g.info) body+=`<tr class="grp"><td colspan="${nc}"><b>${esc(g.title)}</b>${g.info?`<div class="pc" style="font-weight:400;margin-top:2px">${g.info}</div>`:''}</td></tr>`;
     body+=g.rows.map(r=>`<tr${r._late?' style="background:#fef2f2"':''}>${R.cols.map(c=>`<td${c[2]?' class="num"':''}>${cellTxt(c,r[c[0]])}</td>`).join('')}</tr>`).join('');
-    if(R.groups.length>1||g.title) body+=`<tr style="font-weight:600;background:#f8fafc"><td>סה״כ ${esc(g.title||'')}</td>${R.cols.slice(1).map(c=>`<td class="num">${sumOf(g.rows,c)}</td>`).join('')}</tr>`;
+    if(R.sumCols.length&&(R.groups.length>1||g.title)) body+=`<tr style="font-weight:600;background:#f8fafc"><td>סה״כ ${esc(g.title||'')}</td>${R.cols.slice(1).map(c=>`<td class="num">${sumOf(g.rows,c)}</td>`).join('')}</tr>`;
   });
   const all=R.groups.flatMap(g=>g.rows);
   $('#rpTitle').textContent=R.title; $('#rpSub').textContent=R.sub;
   $('#rpKpis').innerHTML=R.kpis.map(([l,v])=>`<div class="kpi"><div class="lbl">${esc(l)}</div><div class="val" style="font-size:19px">${esc(v)}</div></div>`).join('');
   $('#rpNote').style.display=R.note?'':'none'; $('#rpNote').textContent=R.note||'';
   $('#tRep').innerHTML=all.length?`<thead><tr>${R.cols.map(c=>`<th${c[2]?' class="num"':''}>${c[1]}</th>`).join('')}</tr></thead><tbody>${body}</tbody>
-    <tfoot><tr><td>סה״כ</td>${R.cols.slice(1).map(c=>`<td class="num">${sumOf(all,c)}</td>`).join('')}</tr></tfoot>`
+    ${R.sumCols.length?`<tfoot><tr><td>סה״כ</td>${R.cols.slice(1).map(c=>`<td class="num">${sumOf(all,c)}</td>`).join('')}</tr></tfoot>`:''}`
     :`<tbody><tr><td><div class="empty">${esc(R.empty)}</div></td></tr></tbody>`;
 }
 async function exportReport(){
@@ -3108,10 +3390,10 @@ async function exportReport(){
   R.groups.forEach(g=>{
     if(g.title) aoa.push([g.title+(g.info?' – '+g.info.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' '):'')]);
     g.rows.forEach(r=>aoa.push(C.map(c=>val(c,r[c[0]]))));
-    if(R.groups.length>1||g.title) aoa.push(C.map((c,i)=>i===0?'סה״כ '+(g.title||''):R.sumCols.includes(c[0])?r2(sumK(g.rows,c[0])):''));
+    if(R.sumCols.length&&(R.groups.length>1||g.title)) aoa.push(C.map((c,i)=>i===0?'סה״כ '+(g.title||''):R.sumCols.includes(c[0])?r2(sumK(g.rows,c[0])):''));
   });
   const all=R.groups.flatMap(g=>g.rows);
-  aoa.push(C.map((c,i)=>i===0?'סה״כ':R.sumCols.includes(c[0])?r2(sumK(all,c[0])):''));
+  if(R.sumCols.length) aoa.push(C.map((c,i)=>i===0?'סה״כ':R.sumCols.includes(c[0])?r2(sumK(all,c[0])):''));
   if(R.note) aoa.push([],[R.note]);
   const fname=R.title.replace(/[\\/:*?"<>|]/g,'-');
   try{
@@ -3127,7 +3409,7 @@ async function exportReport(){
 function bindReports(){
   $('#rpType').innerHTML=RP_TYPES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
   const d=new Date(); $('#rpMonth').value=d.getFullYear()+'-'+pad(d.getMonth()+1);
-  ['#rpType','#rpProj','#rpMonth','#rpOpen','#rpHor'].forEach(s=>$(s).addEventListener('change',renderReport));
+  ['#rpType','#rpProj','#rpMonth','#rpOpen','#rpHor','#rpChgFrom'].forEach(s=>$(s).addEventListener('change',renderReport));
   $('#rpPrev').onclick=()=>{const [y,m]=$('#rpMonth').value.split('-').map(Number);const x=new Date(y,m-2,1);$('#rpMonth').value=x.getFullYear()+'-'+pad(x.getMonth()+1);renderReport();};
   $('#rpNext').onclick=()=>{const [y,m]=$('#rpMonth').value.split('-').map(Number);const x=new Date(y,m,1);$('#rpMonth').value=x.getFullYear()+'-'+pad(x.getMonth()+1);renderReport();};
   $('#rpPrint').onclick=()=>{document.body.classList.add('prt-rep');setTimeout(()=>{window.print();document.body.classList.remove('prt-rep');},100);};
@@ -3247,7 +3529,7 @@ function bind(){
   };
 
   // party modal
-  bindPartyModal(); bindDrive(); bindReports(); bindListViews();
+  bindPartyModal(); bindDrive(); bindReports(); bindListViews(); bindAlerts();
   $('#qCli').oninput=renderParties; $('#qVen').oninput=renderParties;
   $('#pSave').onclick=()=>{
     const name=$('#pName').value.trim(); if(!name) return toast('חובה להזין שם');
@@ -3305,7 +3587,7 @@ function bind(){
   document.body.addEventListener('click',e=>{const a=e.target.closest('[data-open]');if(a){e.preventDefault();switchProject(a.dataset.open);}});
   const bindSet=(sel,key,num)=>$(sel).onchange=e=>{S.settings[key]=num?(Number(e.target.value)||0):e.target.value;save();render();};
   bindSet('#sOpen','openingBalance',1);bindSet('#sFrom','from');bindSet('#sTo','to');
-  bindSet('#sVat','vat',1);bindSet('#sAlert','alert',1);bindSet('#sVatMode','vatMode');
+  bindSet('#sVat','vat',1);bindSet('#sAlert','alert',1);bindSet('#sCrit','critPct',1);bindSet('#sVatMode','vatMode');
 
   // export / print / backup
   $('#btnExport').onclick=exportCsv;
@@ -3422,7 +3704,7 @@ function bind(){
 load(); bind(); syncSettingsUI(); render(); drvBoot();
 if(DB.view==='all'&&DB.projects.length>1) switchProject('__all');
 if(typeof Chart==='undefined') setTimeout(()=>{if(typeof Chart==='undefined')$('#chFallback').style.display='block';else render();},1500);
-window.CF={get S(){return S;},get DRV(){return DRV;},drvSync,drvSyncFiles,dirLookup,fget,openParty,classifyTrade,budParties,openSpread,get DB(){return DB;},switchProject,newProject,compute,payDate,parseNum,parseDate,parseTerms,parseDelimited,demo,save,render,
+window.CF={alList,alTrack,openAlerts,get S(){return S;},get DRV(){return DRV;},drvSync,drvSyncFiles,dirLookup,fget,openParty,classifyTrade,budParties,openSpread,get DB(){return DB;},switchProject,newProject,compute,payDate,parseNum,parseDate,parseTerms,parseDelimited,demo,save,render,
   add(type,o){rowsOf(type).push(Object.assign({id:uid(),status:'צפוי',terms:'',basis:'',actualAmount:'',actualDate:''},o));save();render();}};
 </script>
 </body>
