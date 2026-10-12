@@ -69,6 +69,13 @@ section{min-width:0}
 
 /* ---------- tables ---------- */
 .tbl-scroll{overflow:auto;max-width:100%;min-width:0;-webkit-overflow-scrolling:touch}
+/* הטבלה נגללת בתוך מסגרת בגובה המסך: פס הגלילה הצידי תמיד גלוי והכותרת נשארת למעלה */
+.tbl-scroll{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px);overscroll-behavior-x:contain}
+table.t thead th{white-space:normal;min-width:56px;vertical-align:bottom}
+#tIn td:nth-child(2),#tOut td:nth-child(2){white-space:normal;min-width:210px}
+#tIn td:last-child,#tOut td:last-child{white-space:normal;min-width:70px}
+#tIn td:nth-child(3),#tOut td:nth-child(3){white-space:normal;min-width:130px}
+@media(max-width:1700px){table.t th,table.t td{padding:8px 8px}}
 .card{min-width:0}
 table.t{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
 table.t th,table.t td{padding:9px 11px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -181,6 +188,7 @@ tr.grp td{background:#eef2f7!important;font-weight:600;border-top:2px solid #cbd
   .wrap{padding:0;max-width:none}
   body.prt-rep .wrap>section:not(#v-reports),body.prt-rep .wrap>.info{display:none!important}
   body.prt-rep #v-reports .tbl-scroll{overflow:visible}
+  .tbl-scroll{max-height:none!important;overflow:visible!important}
   body.prt-rep #v-reports .kpi{box-shadow:none;border:1px solid #cbd5e1}
   @page{size:landscape;margin:10mm}
 }
