@@ -425,6 +425,8 @@ tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     <div class="info">ספק שכבר הוגדר בפרויקט אחר מזוהה לפי שמו, ופרטיו (איש קשר, טלפון, בנק, תנאי שוטף) מוצעים למילוי אוטומטי. תנאי התשלום כאן הם ברירת המחדל לכל שורת הוצאה חדשה של אותו ספק.</div>
     <div class="card">
       <div class="card-h"><h3>ספקים וקבלני משנה</h3><div class="spacer"></div>
+        <label class="mut" style="font-size:12.5px;align-self:center">קיבוץ</label>
+        <select class="i" id="venGroup" style="max-width:150px"><option value="role">לפי סוג</option><option value="cat">לפי סעיף</option><option value="terms">לפי תנאי תשלום</option><option value="">ללא קיבוץ</option></select>
         <input class="i" id="qVen" placeholder="חיפוש ספק, איש קשר, טלפון…" style="max-width:240px">
         <button class="btn sm" data-dirimp="vendor">📇 מפרויקטים קודמים</button>
         <button class="btn pri sm" id="addVen">+ ספק / קבלן</button></div>
@@ -1099,7 +1101,7 @@ const DEF_CATS=['עבודה (קבלני ביצוע)','חומרים','יועצי�
 const IN_KINDS=['חשבון חלקי','אבן דרך','מקדמה','חשבון סופי','שחרור עיכבון','אחר'];
 const OUT_KINDS=['חשבון חלקי','מקדמה','הזמנת רכש','ריטיינר','חשבון סופי','שחרור עיכבון','אחר'];
 const STATUS=['צפוי','מאושר','נדרש תשלום','שולם','בוטל'];
-const ROLES_V=['קבלן משנה','ספק חומרים','יועץ / מתכנן','פיקוח / ניהול','כללי'];
+const ROLES_V=['קבלן ראשי','קבלן משנה','ספק חומרים','ספק ציוד / השכרה','יועץ / מתכנן','פיקוח / ניהול','רשויות ואגרות','כללי'];
 const ROLES_C=['יזם','לקוח קצה','שוכר','אחר'];
 
 let S=null, chMain=null, chCat=null;
@@ -1692,24 +1694,50 @@ function renderParties(){
       <td class="num">${p.retention?p.retention+'%':'—'}</td>${stat(p,'income')}${acts(p,'client')}</tr>`).join('')
       :`<tr><td colspan="8"><div class="empty">לא נמצאו לקוחות תואמים</div></td></tr>`)+'</tbody>';
   // ספקים
-  const tv=$('#tVen'), qv=q('#qVen'), LV=S.vendors.filter(p=>match(p,qv)), ALP=alPartyMap();
+  const tv=$('#tVen'), qv=q('#qVen'), LV=S.vendors.filter(p=>match(p,qv)), ALP=alPartyMap(), VG=venPrefs();
+  if($('#venGroup')) $('#venGroup').value=VG.g;
   if(!S.vendors.length) tv.innerHTML=`<tbody><tr><td><div class="empty">אין ספקים רשומים</div></td></tr></tbody>`;
   else tv.innerHTML=`<thead><tr><th>ספק / קבלן</th><th>טלפון</th><th>אימייל</th><th>חשבון בנק</th><th>תנאי תשלום</th><th>סעיף</th><th>חוזים</th><th>שורות</th><th>סה״כ</th><th></th></tr></thead><tbody>`+
-    (LV.length?LV.map(p=>{
+    (LV.length?venGrouped(LV,VG,p=>{
       const bank=(p.bankName||p.bankBranch||p.bankAcct)?`<div class="bank">${esc(p.bankName||'—')}<br><span class="mut">סניף</span> <b dir="ltr">${esc(p.bankBranch||'—')}</b> · <span class="mut">חשבון</span> <b dir="ltr">${esc(p.bankAcct||'—')}</b>
         <button class="btn ghost sm" data-bcopy="${p.id}" title="העתקת פרטי הבנק" style="padding:1px 5px">📋</button></div>`:'<span class="mut">—</span>';
       const cs=(p.contracts||[]);
       const cc=cs.length?cs.map(c=>`<button class="chip b" data-fview="${c.id}" data-pid="${p.id}" title="${esc(c.name)}" style="border:0;cursor:pointer;max-width:150px;overflow:hidden;text-overflow:ellipsis">📄 ${esc(c.name)}${c.driveId?' ☁️':''}</button>`).join(' '):'<span class="mut">—</span>';
       const A=ALP.get(p.name);
-      return `<tr${A?alRowAttr(A.pct,A.crit):''}><td><b>${esc(p.name)}</b>${A?` <b>${A.crit?'⚠ ':''}${A.pct!=null?'+'+fmtPct(A.pct):''}</b>`:''}<div class="pc">${esc(p.role||'')}${p.contact?' · 👤 '+esc(p.contact):''}</div>
+      const roles=ROLES_V.includes(p.role||'')||!p.role?ROLES_V:[p.role].concat(ROLES_V);
+      return `<tr${A?alRowAttr(A.pct,A.crit):''}><td><b>${esc(p.name)}</b>${A?` <b>${A.crit?'⚠ ':''}${A.pct!=null?'+'+fmtPct(A.pct):''}</b>`:''}
+          <div class="pc" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select class="ti" data-vrole="${p.id}" title="סוג הגוף" style="width:auto;max-width:150px;padding:2px 6px;font-size:12px">${(p.role?'':'<option value="" selected>— סוג —</option>')+roles.map(r=>`<option${r===p.role?' selected':''}>${esc(r)}</option>`).join('')}</select>${p.contact?'👤 '+esc(p.contact):''}</div>
           ${p.filledFrom?`<div class="pc">✨ פרטים מ«${esc(p.filledFrom)}»</div>`:''}${p.notes?`<div class="pc">${esc(p.notes)}</div>`:''}</td>
         <td class="pc">${tel(p.phone)}</td>
         <td class="pc">${mail(p.email)||'—'}${p.email2?'<br>'+mail(p.email2):''}</td>
         <td>${bank}</td>
         <td><span class="chip b">${esc(termsLabel(p.terms,p.basis))}</span>${p.retention?`<div class="pc">עיכבון ${p.retention}%</div>`:''}</td>
-        <td class="pc">${esc(p.cat||'—')}</td><td style="min-width:110px">${cc}</td>${stat(p,'expense')}${acts(p,'vendor')}</tr>`;}).join('')
+        <td class="pc">${esc(p.cat||'—')}</td><td style="min-width:110px">${cc}</td>${stat(p,'expense')}${acts(p,'vendor')}</tr>`;})
       :`<tr><td colspan="10"><div class="empty">לא נמצאו ספקים תואמים</div></td></tr>`)+'</tbody>';
   $('#dlParty').innerHTML='';
+}
+
+/* קיבוץ ספקים: לפי סוג, סעיף או תנאי תשלום, עם קבוצות מתקפלות */
+const VG_K='fitout-cashflow-vengroup';
+function venPrefs(){let o={};try{o=JSON.parse(localStorage.getItem(VG_K)||'{}')||{};}catch(e){} if(!('g' in o))o.g='role'; if(!Array.isArray(o.col))o.col=[]; return o;}
+function venPrefsSave(o){try{localStorage.setItem(VG_K,JSON.stringify(o));}catch(e){}}
+function venKey(p,g){return g==='role'?(p.role||''):g==='cat'?(p.cat||''):g==='terms'?termsLabel(p.terms,p.basis):'';}
+function venGrouped(L,VG,rowFn){
+  if(!VG.g) return L.map(rowFn).join('');
+  const G=new Map(); L.forEach(p=>{const k=venKey(p,VG.g);if(!G.has(k))G.set(k,[]);G.get(k).push(p);});
+  const ord=VG.g==='role'?ROLES_V:VG.g==='cat'?S.settings.cats:[];
+  const keys=[...G.keys()].sort((a,b)=>{if(!a)return 1;if(!b)return -1;const ia=ord.indexOf(a),ib=ord.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)||a.localeCompare(b,'he');});
+  const tot=ps=>S.expenses.filter(r=>r.status!=='בוטל'&&ps.some(p=>p.name===r.party)).reduce((a,r)=>a+(Number(r.amount)||0),0);
+  return keys.map(k=>{const ps=G.get(k), col=VG.col.includes(VG.g+':'+k);
+    return `<tr class="grp"><td colspan="10"><button class="btn ghost sm" data-vgcol="${esc(VG.g+':'+k)}" style="padding:0 4px">${col?'◂':'▾'}</button>
+      <b>${esc(k||(VG.g==='role'?'ללא סוג':VG.g==='cat'?'ללא סעיף':'—'))}</b> <span class="chip xs">${ps.length}</span>
+      <span style="margin-inline-start:14px">סה״כ בתזרים: <b>${money(tot(ps))}</b></span></td></tr>`+(col?'':ps.map(rowFn).join(''));}).join('');
+}
+function bindVenGroup(){
+  $('#venGroup').onchange=e=>{const o=venPrefs();o.g=e.target.value;venPrefsSave(o);renderParties();};
+  $('#tVen').addEventListener('click',e=>{const b=e.target.closest('[data-vgcol]');if(!b)return;const o=venPrefs(),k=b.dataset.vgcol,i=o.col.indexOf(k);i<0?o.col.push(k):o.col.splice(i,1);venPrefsSave(o);renderParties();});
+  $('#tVen').addEventListener('change',e=>{const sel=e.target.closest('[data-vrole]');if(!sel)return;const p=S.vendors.find(x=>x.id===sel.dataset.vrole);if(!p)return;
+    p.role=sel.value;p.updatedAt=Date.now();save();setTimeout(renderParties,0);toast('«'+p.name+'» סווג כ'+(p.role||'ללא סוג'));});
 }
 
 /* ---------- master render ---------- */
@@ -4891,7 +4919,7 @@ function bind(){
   };
 
   // party modal
-  bindPartyModal(); bindDrive(); bindReports(); bindListViews(); bindAlerts(); bindIdx(); bindExec(); bindDev(); bindSmart(); $('#rLk').addEventListener('change',calcPreview);
+  bindPartyModal(); bindDrive(); bindReports(); bindListViews(); bindAlerts(); bindIdx(); bindExec(); bindDev(); bindSmart(); bindVenGroup(); $('#rLk').addEventListener('change',calcPreview);
   $('#qCli').oninput=renderParties; $('#qVen').oninput=renderParties;
   $('#pSave').onclick=()=>{
     const name=$('#pName').value.trim(); if(!name) return toast('חובה להזין שם');
