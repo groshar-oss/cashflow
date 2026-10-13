@@ -197,6 +197,10 @@ tr.alrow>td,tr.alrow .mut,tr.alrow .pc,tr.alrow .neg,tr.alrow .pos,tr.alrow a{co
 tr.grp.alrow td{background:inherit!important;color:inherit}
 .alcard .mut{color:inherit;opacity:.85}
 tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.bcx{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:start}
+.bcx:hover b{text-decoration:underline}
+tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
+.bcdet table.t th,.bcdet table.t td{padding:5px 8px;font-size:12.5px}
 </style>
 </head>
 <body>
@@ -364,6 +368,12 @@ tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
         <span class="hint">תקציב מול התקשרות, צפי בתזרים ותשלום בפועל. הצפי והבפועל נלקחים משורות ההוצאה של אותו גוף.</span>
         <div class="spacer"></div>
         <button class="btn" id="bSpreadAll">📅 פריסת התקציב לתזרים</button>
+      </div>
+      <div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:0">
+        <select class="i" id="bcStat" style="max-width:190px"><option value="">כל הסטטוסים</option><option value="over">חריגה</option><option value="part">נפרס חלקית</option><option value="none">טרם נפרס לתזרים</option><option value="ok">תקין</option><option value="nob">הוצאות ללא תקציב</option></select>
+        <select class="i" id="bcTrade" style="max-width:200px"></select>
+        <input class="i" id="bcQ" placeholder="חיפוש קבלן / מלאכה…" style="max-width:200px">
+        <span class="mut" id="bcCount" style="font-size:12px"></span>
       </div>
       <div class="tbl-scroll"><table class="t" id="tBCtl"></table></div>
     </div>
@@ -1907,6 +1917,38 @@ function budParties(){
   });
   return [...map.values()].sort((a,b)=>b.budget-a.budget);
 }
+/* בקרת תקציב: פירוט קבלן לפי מלאכה – איפה החריגה. שורת הוצאה משויכת למלאכה בשדה r.trade (כשלגוף מלאכה אחת – אוטומטית) */
+const BC_OPEN=new Set();
+function bcDetail(g,A){
+  const ex=S.expenses.filter(r=>(r.party||'')===g.party&&r.status!=='בוטל'), TR=[...g.trades], one=TR.length===1;
+  const KW=TR.map(t=>[t,t.split(/[\s–\-,/()]+/).filter(w=>w.length>2&&!['קבלן','ראשי','משנה','עבודות','כללי'].includes(w))]);
+  const guess=r=>{const d=(r.desc||'')+' '+(r.notes||''), h=KW.filter(([,ws])=>ws.some(w=>d.includes(w)));return h.length===1?h[0][0]:'';};
+  const trOf=r=>one?TR[0]:(TR.includes(r.trade)?r.trade:guess(r)), isAuto=r=>!one&&!TR.includes(r.trade)&&!!guess(r);
+  const sum=(L,k)=>L.reduce((a,r)=>a+(Number(r[k])||0),0);
+  const G=TR.map(t=>{const L=ex.filter(r=>trOf(r)===t), items=S.budget.filter(i=>(i.party||'')===g.party&&i.trade===t), b=sum(items,'total'), f=sum(L,'amount');
+    return {t,items,L,b,f,p:sum(L,'actualAmount'),d:b-f,over:f>b+0.5};}).sort((x,y)=>(y.over-x.over)||(x.d-y.d));
+  const isVO=r=>!TR.includes(r.trade)&&(/(^|\s)VO[-\s\d]/i.test(r.desc||'')||/חריג|תוספת|שינוי/.test((r.kind||'')+' '+(r.desc||'').slice(0,25)));
+  const vo=ex.filter(isVO), un=ex.filter(r=>!trOf(r)&&!isVO(r));
+  G.forEach(x=>{x.L=x.L.filter(r=>!isVO(r));x.f=sum(x.L,'amount');x.p=sum(x.L,'actualAmount');x.d=x.b-x.f;x.over=x.f>x.b+0.5;}); G.sort((x,y)=>(y.over-x.over)||(x.d-y.d));
+  const rs=A?`<div style="margin-bottom:8px">${A.reasons.map(r=>`<div>⚠ ${esc(r.label)}: ${money(r.from)} ← ${money(r.to)}${r.pct!=null?` <b>(+${fmtPct(r.pct)})</b>`:''}</div>`).join('')}</div>`:'';
+  const ref=Math.max(g.commit,g.forecast), anyOver=G.some(x=>x.over)||vo.length>0;
+  const note=un.length&&!anyOver?`<div class="info" style="margin-bottom:8px">ל«${esc(g.party)}» כמה מלאכות, ו-${un.length} שורות בתזרים (${money(sum(un,'amount'))}) עוד לא שויכו למלאכה. שייכו כל שורה למלאכה שלה (בבחירה למטה) ויוצג בדיוק איפה החריגה.</div>`
+    :!anyOver&&ref>g.budget+0.5?`<div class="info" style="margin-bottom:8px">החריגה היא בהתקשרות הכוללת (${money(g.commit)}) מול תקציב של ${money(g.budget)}, ולא במלאכה מסוימת.</div>`:'';
+  const pc=x=>x.b?` <span style="font-size:11px">(+${fmtPct((x.f-x.b)/x.b*100)})</span>`:'';
+  const trSel=r=>one&&!isVO(r)?'':`<select class="ti" data-rtrade="${r.id}" style="max-width:190px;font-size:12px"><option value="">— שיוך למלאכה —</option>${TR.map(t=>`<option${t===trOf(r)?' selected':''}>${esc(t)}</option>`).join('')}</select>${isAuto(r)?' <span class="chip xs y" title="שיוך אוטומטי לפי תיאור השורה">אוטו׳</span>':''}`;
+  const rowsL=L=>'<div style="max-height:230px;overflow:auto">'+L.map(r=>`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:2px 0"><button class="btn ghost sm" data-ed="${r.id}" data-t="expense" style="padding:1px 6px">${esc(r.desc||'—')} · ${money(r.amount)} · ${fmtD(r.date)}${isPaid(r)?' ✓ שולם':''}</button>${trSel(r)}</div>`).join('')+'</div>';
+  return `<div class="bcdet">${rs}${note}<table class="t" style="min-width:0"><thead><tr><th>מלאכה</th><th>תקציב</th><th>צפי בתזרים</th><th>שולם</th><th>יתרה / חריגה</th></tr></thead><tbody>`+
+    G.map(x=>`<tr${x.over?' style="background:#fde2e2;color:#7f1d1d"':''}><td style="white-space:normal"><b>${esc(x.t)}</b>${x.over?' <span class="chip r xs">חריגה</span>':''}</td>
+      <td class="num">${money(x.b)}</td><td class="num">${x.f?money(x.f):'—'}</td><td class="num">${x.p?money(x.p):'—'}</td><td class="num"><b>${money(x.d)}</b>${x.over?pc(x):''}</td></tr>`+
+      (x.over?`<tr><td colspan="5" style="white-space:normal;padding-top:0;font-size:12px">
+        <div style="margin:2px 0 4px"><b>סעיפי התקציב במלאכה:</b> ${x.items.map(i=>`${esc(i.chapter?i.chapter+' · ':'')}${esc(i.desc)} <b>${money(i.total)}</b>`).join(' | ')}</div>
+        <div><b>שורות בתזרים:</b>${rowsL(x.L)}</div></td></tr>`:'')).join('')+
+    (vo.length?`<tr style="background:#fde2e2;color:#7f1d1d"><td style="white-space:normal"><b>חריגים / תוספות (VO) מחוץ לתקציב</b> <span class="chip r xs">חריגה</span></td><td class="num">—</td><td class="num">${money(sum(vo,'amount'))}</td><td class="num">${money(sum(vo,'actualAmount'))||'—'}</td><td class="num"><b>${money(-sum(vo,'amount'))}</b></td></tr>
+      <tr><td colspan="5" style="white-space:normal;padding-top:0;font-size:12px"><div class="mut" style="margin:2px 0">שורות שזוהו כחריגים / תוספות לפי התיאור. אם שורה שייכת למלאכה בתקציב, בחרו אותה והיא תעבור לשם.</div>${rowsL(vo)}</td></tr>`:'')+
+    (un.length?`<tr style="background:#fef9c3"><td><b>לא שויך למלאכה</b></td><td class="num">—</td><td class="num">${money(sum(un,'amount'))}</td><td class="num">${money(sum(un,'actualAmount'))||'—'}</td><td></td></tr>
+      <tr><td colspan="5" style="white-space:normal;padding-top:0;font-size:12px">${rowsL(un)}</td></tr>`:'')+
+    `</tbody></table></div>`;
+}
 function renderBudget(){
   if(!$('#tBud')) return;
   const B=S.budget, P=budParties();
@@ -1929,23 +1971,34 @@ function renderBudget(){
   const ALM=new Map(alList().open.map(a=>[a.key,a]));
   const budNames=new Set(P.map(g=>g.party));
   const unEx=S.expenses.filter(r=>!budNames.has(r.party||'')&&r.status!=='בוטל');
+  const showSell=ts>0, NC=showSell?11:10;
+  const bcSt=g=>{const ref=Math.max(g.commit,g.forecast);return ALM.get('p:'+g.party)||ref>g.budget+0.5?'over':!g.forecast?'none':g.forecast+0.5<g.budget?'part':'ok';};
+  const fS=$('#bcStat').value, fTr=$('#bcTrade').value, fQ=($('#bcQ').value||'').trim();
+  const trSel=$('#bcTrade'), prevTr=trSel.value;
+  trSel.innerHTML='<option value="">כל המלאכות</option>'+[...new Set(B.map(i=>i.trade))].map(t=>`<option${t===prevTr?' selected':''}>${esc(t)}</option>`).join('');
+  const PF=P.filter(g=>(!fS||bcSt(g)===fS)&&(!fTr||g.trades.has(fTr))&&(!fQ||[g.party,...g.trades].some(x=>String(x||'').includes(fQ))));
+  const filt=PF.length<P.length, showUn=!!unEx.length&&(!fS||fS==='nob')&&!fTr&&!fQ;
+  const PS=fS==='nob'?[]:PF, sm=k=>PS.reduce((a,g)=>a+g[k],0);
+  $('#bcCount').textContent=filt||fS==='nob'?`מוצגים ${PS.length} מתוך ${P.length}`:'';
   $('#tBCtl').innerHTML=!B.length?'<tbody><tr><td><div class="empty"><div class="big">📋</div>עדיין לא הועלה תקציב לפרויקט. העלו קובץ Excel של התקציב / ניתוח העלויות, או הוסיפו סעיפים ידנית.</div></td></tr></tbody>':
-    `<thead><tr><th>קבלן / ספק</th><th>מלאכות</th><th>תקציב עלות</th><th>מועמס</th><th>התקשרות (₪)</th><th>צפי בתזרים</th><th>שולם בפועל</th><th>יתרת תקציב</th><th>ניצול</th><th>סטטוס</th><th></th></tr></thead><tbody>`+
-    P.map(g=>{
+    `<thead><tr><th>קבלן / ספק</th><th>מלאכות</th><th>תקציב עלות</th>${showSell?'<th>מועמס</th>':''}<th>התקשרות (₪)</th><th>צפי בתזרים</th><th>שולם בפועל</th><th>יתרת תקציב</th><th>ניצול</th><th>סטטוס</th><th></th></tr></thead><tbody>`+
+    (PS.length||showUn?'':`<tr><td colspan="${NC}"><div class="empty">אין קבלנים או ספקים שעונים על הסינון</div></td></tr>`)+
+    PS.map(g=>{
       const ref=Math.max(g.commit,g.forecast), rest=g.budget-ref, use=g.budget?g.actual/g.budget*100:0;
       const st=ref>g.budget+0.5?'<span class="chip r">חריגה</span>':(!g.forecast?'<span class="chip">טרם נפרס לתזרים</span>':(g.forecast+0.5<g.budget?'<span class="chip y">נפרס חלקית</span>':'<span class="chip g">תקין</span>'));
-      const A=ALM.get('p:'+g.party);
-      return `<tr${A?alRowAttr(A.pct,A.crit):''}><td style="white-space:normal;min-width:170px"><b>${esc(g.party||'ללא קבלן/ספק משויך')}</b></td>
-        <td style="white-space:normal;min-width:150px" class="mut">${esc([...g.trades].join(', '))}</td>
-        <td class="num"><b>${money(g.budget)}</b></td><td class="num">${g.sell?money(g.sell):'<span class="mut">—</span>'}</td>
-        <td><input class="ti num" type="number" step="0.01" data-commit="${esc(g.party)}" value="${g.commit||''}" placeholder="—" style="max-width:120px"></td>
+      const A=ALM.get('p:'+g.party), isOver=bcSt(g)==='over', open=BC_OPEN.has(g.party);
+      return `<tr${A?alRowAttr(A.pct,A.crit):''}><td style="white-space:normal;min-width:130px"><button class="bcx" data-bcx="${esc(g.party)}" title="פירוט לפי סעיף תקציב">${open?'▾':'◂'} <b>${esc(g.party||'ללא קבלן/ספק משויך')}</b></button>${isOver?`<div style="font-size:11px;opacity:.85">${open?'':'לחצו לפירוט החריגה'}</div>`:''}</td>
+        <td style="white-space:normal;min-width:110px;font-size:12px" class="mut">${esc([...g.trades].join(', '))}</td>
+        <td class="num"><b>${money(g.budget)}</b></td>${showSell?`<td class="num">${g.sell?money(g.sell):'<span class="mut">—</span>'}</td>`:''}
+        <td><input class="ti num" inputmode="decimal" data-commit="${esc(g.party)}" value="${g.commit?money(g.commit).replace('₪',''):''}" placeholder="—" style="width:105px"></td>
         <td class="num">${g.forecast?money(g.forecast):'<span class="mut">—</span>'}</td><td class="num">${g.actual?money(g.actual):'<span class="mut">—</span>'}</td>
         <td class="num ${rest<0?'neg':'pos'}"><b>${money(rest)}</b></td>
-        <td style="min-width:90px"><div class="bar"><i style="width:${Math.min(100,use)}%;${use>100?'background:var(--neg)':''}"></i></div><span class="mut" style="font-size:11px">${Math.round(use)}%</span></td>
-        <td>${A?`<b>${A.crit?'⚠ ':''}${A.pct!=null?'+'+fmtPct(A.pct):'חריגה'}</b>`:st}</td><td><button class="btn sm" data-bspread="${esc(g.party)}">פריסה</button></td></tr>`;}).join('')+
-    (unEx.length?`<tr><td><span class="mut">הוצאות בתזרים ללא סעיף תקציב</span></td><td class="mut" style="white-space:normal">${esc([...new Set(unEx.map(r=>r.party||'ללא שיוך'))].slice(0,4).join(', '))}${new Set(unEx.map(r=>r.party)).size>4?'…':''}</td><td class="num">—</td><td></td><td></td>
+        <td style="min-width:70px"><div class="bar"><i style="width:${Math.min(100,use)}%;${use>100?'background:var(--neg)':''}"></i></div><span class="mut" style="font-size:11px">${Math.round(use)}%</span></td>
+        <td>${A?`<b>${A.crit?'⚠ ':''}${A.pct!=null?'+'+fmtPct(A.pct):'חריגה'}</b>`:st}</td><td><button class="btn sm" data-bspread="${esc(g.party)}">פריסה</button></td></tr>`+
+        (open?`<tr class="bcd"><td colspan="${NC}">${bcDetail(g,A)}</td></tr>`:'');}).join('')+
+    (showUn?`<tr><td><span class="mut">הוצאות בתזרים ללא סעיף תקציב</span></td><td class="mut" style="white-space:normal">${esc([...new Set(unEx.map(r=>r.party||'ללא שיוך'))].slice(0,4).join(', '))}${new Set(unEx.map(r=>r.party)).size>4?'…':''}</td><td class="num">—</td>${showSell?'<td></td>':''}<td></td>
       <td class="num">${money(unEx.reduce((a,r)=>a+(Number(r.amount)||0),0))}</td><td class="num">${money(unEx.reduce((a,r)=>a+(Number(r.actualAmount)||0),0))}</td><td></td><td></td><td><span class="chip y">ללא תקציב</span></td><td></td></tr>`:'')+
-    `</tbody><tfoot><tr><td colspan="2">סה״כ</td><td class="num">${money(tb)}</td><td class="num">${ts?money(ts):''}</td><td class="num">${money(tc)}</td><td class="num">${money(tf)}</td><td class="num">${money(ta)}</td><td class="num">${money(tb-P.reduce((a,g)=>a+Math.max(g.commit,g.forecast),0))}</td><td colspan="3"></td></tr></tfoot>`;
+    `</tbody><tfoot><tr><td colspan="2">סה״כ${filt?' (מסונן)':''}</td><td class="num">${money(sm('budget'))}</td>${showSell?`<td class="num">${money(sm('sell'))}</td>`:''}<td class="num">${money(sm('commit'))}</td><td class="num">${money(sm('forecast'))}</td><td class="num">${money(sm('actual'))}</td><td class="num">${money(sm('budget')-PS.reduce((a,g)=>a+Math.max(g.commit,g.forecast),0))}</td><td colspan="3"></td></tr></tfoot>`;
 
   // ---- lines table grouped by trade
   const tf_=$('#bTradeF'), prevT=tf_.value;
@@ -5190,9 +5243,13 @@ function bind(){
   });
   $('#tBud').addEventListener('click',e=>{const b=e.target.closest('[data-brm]');if(!b)return;
     const i=S.budget.findIndex(x=>x.id===b.dataset.brm);if(i>=0&&confirm('למחוק את הסעיף «'+S.budget[i].desc+'»?')){S.budget.splice(i,1);save();renderBudget();}});
+  ['#bcStat','#bcTrade'].forEach(x=>$(x).addEventListener('change',renderBudget));
+  $('#tBCtl').addEventListener('change',e=>{const el=e.target.closest('[data-rtrade]');if(!el)return;const r=S.expenses.find(x=>x.id===el.dataset.rtrade);if(!r)return;
+    if(el.value)r.trade=el.value; else delete r.trade; save(); renderBudget();}); $('#bcQ').addEventListener('input',renderBudget);
   $('#tBCtl').addEventListener('change',e=>{const el=e.target.closest('[data-commit]');if(!el)return;
-    const v=Number(el.value)||0; if(v)S.budgetCommit[el.dataset.commit]=v; else delete S.budgetCommit[el.dataset.commit]; save(); renderBudget();});
-  $('#tBCtl').addEventListener('click',e=>{const b=e.target.closest('[data-bspread]');if(b)openSpread(b.dataset.bspread);});
+    const v=parseNum(el.value)||0; if(v)S.budgetCommit[el.dataset.commit]=v; else delete S.budgetCommit[el.dataset.commit]; save(); renderBudget();});
+  $('#tBCtl').addEventListener('click',e=>{const b=e.target.closest('[data-bspread]');if(b)openSpread(b.dataset.bspread);
+    const x=e.target.closest('[data-bcx]'); if(x){const n=x.dataset.bcx; BC_OPEN.has(n)?BC_OPEN.delete(n):BC_OPEN.add(n); renderBudget();}});
   $('#bSpreadAll').onclick=()=>openSpread();
   $('#spAdvClear').onclick=()=>{$('#spAdvMode').value='none';$('#spAdvVal').value='';spreadPreview();};
   ['#spFrom','#sprN','#spBase','#spRest','#spAdvMode','#spAdvVal','#spAdvDate','#spAdvOff'].forEach(x=>{$(x).addEventListener('change',spreadPreview);$(x).addEventListener('input',spreadPreview);});
