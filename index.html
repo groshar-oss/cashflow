@@ -84,6 +84,7 @@ table.t tbody tr:hover{background:#f8fbff}
 table.t tfoot td{background:#f1f5f9;font-weight:700;border-top:2px solid #cbd5e1}
 .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 .pos{color:var(--pos)} .neg{color:var(--neg)} .mut{color:var(--muted)}
+.i.autov{color:var(--muted);font-style:italic}
 tr.gap{background:var(--neg-soft)!important}
 tr.gap td:first-child{font-weight:600}
 tr.now td{box-shadow:inset 0 0 0 2px #2563eb22}
@@ -686,6 +687,7 @@ tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
           <div><label class="f">תאריך בפועל</label><input class="i" id="rActDate" type="date"></div>
           <div><label class="f">סטטוס</label><select class="i" id="rStatus"></select></div>
         </div>
+        <div class="mut" id="rActHint" style="font-size:11.5px;margin-top:6px">ברירת מחדל: הסכום הצפוי ומועד התשלום המחושב (באפור). אפשר לערוך. הביצוע נרשם כשהסטטוס «שולם» או כשעורכים את הסכום או התאריך.</div>
       </details>
       <div style="margin-top:12px"><label class="f">הערות</label><textarea class="i" id="rNotes" rows="2"></textarea></div>
       <details class="acc" style="margin-top:12px">
@@ -778,7 +780,8 @@ tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
         <label style="display:flex;gap:7px;align-items:center;font-size:13px"><input type="checkbox" id="pDocsReq"> נדרש סט מסמכים מהגוף הזה (ברירת מחדל לקבלן ראשי וקבלן משנה)</label>
         <div id="pDocsBox">
           <div class="tbl-scroll" style="margin-top:6px"><table class="t" id="pDocs"></table></div>
-          <div class="mut" style="font-size:11.5px;margin-top:4px">מעלים את הקבצים באזור "הסכמים וחוזים" למעלה, ומשייכים כאן כל קובץ למסמך שלו. אישור או תשלום לקבלן עם מסמכים חסרים יבקש אישור מפורש.</div>
+          <div class="mut" style="font-size:11.5px;margin-top:4px">מעלים קובץ ישירות בשורה של המסמך (⬆), או גוררים אותו לייבוא חכם והוא ישויך לבד. 👁 פותח את המסמך. אישור או תשלום לקבלן עם מסמכים חסרים יבקש אישור מפורש.</div>
+          <input type="file" id="fiVdoc" accept=".pdf,image/*,.doc,.docx" style="display:none">
         </div>
         <div class="sec-t">🏁 סגירת חשבון סופי</div>
         <div class="mut" style="font-size:12px">חשבון סופי של הגוף הזה יאושר רק אחרי ששני התנאים מסומנים.</div>
@@ -1546,7 +1549,7 @@ function lvToolbar(type){
     <div><label class="f">מיון לפי</label><div style="display:flex;gap:4px"><select class="i" data-lv="sort">${LV_SORTS.filter(s=>!(isIn&&s[0]==='cat')).map(([k,l])=>`<option value="${k}"${k===v.sort?' selected':''}>${l}</option>`).join('')}</select>
       <button class="btn sm" data-lvdir title="הפוך כיוון מיון">${v.dir>0?'⬆ עולה':'⬇ יורד'}</button></div></div>
     <div><label class="f">${isIn?'לקוח':'ספק / קבלן'}</label><select class="i" data-lv="fParty"><option value="">הכול</option>${parties.map(p=>`<option${p===v.fParty?' selected':''}>${esc(p)}</option>`).join('')}</select></div>
-    <div><label class="f">סטטוס</label><select class="i" data-lv="fStatus"><option value="">הכול</option>${STATUS.map(s=>`<option${s===v.fStatus?' selected':''}>${s}</option>`).join('')}</select></div>
+    <div><label class="f">סטטוס</label><select class="i" data-lv="fStatus"><option value="">הכול</option><option value="@paid"${v.fStatus==='@paid'?' selected':''}>✓ שולם (כולל ביצוע בפועל)</option><option value="@unpaid"${v.fStatus==='@unpaid'?' selected':''}>⏳ לא שולם (בלי מבוטלים)</option>${STATUS.map(s=>`<option${s===v.fStatus?' selected':''}>${s}</option>`).join('')}</select></div>
     ${v.group?`<button class="btn sm ghost" data-lvcol="all">⊟ כיווץ / פתיחת כל הקבוצות</button>`:''}
   </div>
   <div class="sugg" style="display:${sel?'flex':'none'};background:var(--brand-soft);border-color:#c7d2fe;color:#1e3a8a">
@@ -1570,7 +1573,7 @@ function renderRows(type){
   if(q) rows=rows.filter(r=>[r.desc,r.party,r.cat,r.kind,r.notes].some(x=>String(x||'').includes(q)));
   if(fc) rows=rows.filter(r=>(r.cat||'')===fc);
   if(v.fParty) rows=rows.filter(r=>(r.party||'')===v.fParty);
-  if(v.fStatus) rows=rows.filter(r=>(r.status||'צפוי')===v.fStatus);
+  if(v.fStatus) rows=rows.filter(r=>{const pd=isPaid(r)||r.status==='שולם';return v.fStatus==='@paid'?pd:v.fStatus==='@unpaid'?!pd&&r.status!=='בוטל':(r.status||'צפוי')===v.fStatus;});
   const ids=new Set(rows.map(r=>r.id)); [...LVSEL[type]].forEach(id=>{if(!rowsOf(type).some(r=>r.id===id))LVSEL[type].delete(id);});
   lvToolbar(type);
   rows.sort((a,b)=>{const A=lvSortVal(a,type,v.sort),B=lvSortVal(b,type,v.sort);
@@ -2234,7 +2237,7 @@ function openRow(type,id){
   $('#rTermsSel').value=termsToSel($('#rTerms').value,$('#rBasis').value);
   $('#wrapTermsCustom').style.display=$('#rTermsSel').value==='custom'?'':'none';
   $('#rWork').value=r?r.workMonth||'':'';
-  $('#rActAmt').value=r?(r.actualAmount??''):''; $('#rActDate').value=r?r.actualDate||'':'';
+  $('#rActAmt').value=r?(r.actualAmount??''):''; $('#rActDate').value=r?r.actualDate||'':''; actAutoReset();
   $('#rNotes').value=r?r.notes||'':'';
   $('#rLk').value=r&&r.lk==='none'?'none':(r&&r.lk&&typeof r.lk==='object'?'own':''); $('#rLk').querySelector('[value=own]').hidden=!(r&&r.lk&&typeof r.lk==='object');
   $('#rDel').style.display=id?'':'none';
@@ -2264,7 +2267,16 @@ function calcPreview(){
   $('#rCalc').innerHTML=`תנאי תשלום: <b>${esc(termsLabel(terms,basis))}</b> <span class="mut">(${esc(src)})</span> · נספר מ: <b>${esc(baseTxt)}</b> ·
     מועד תשלום מחושב: <b>${pd?pd.toLocaleDateString('he-IL'):'—'}</b>${amt?` · ייפול בתזרים <b>${esc(bucketLabel(bucketKey(pd,'m')))}</b> בסכום <b>${esc(money(amt))}</b>${esc(pcTxt)}`:''}
     ${p&&!own?'<div class="mut" style="margin-top:4px;font-size:11.5px">«לפי כרטיס הגוף» = שימוש אוטומטי בתנאים שהוגדרו לגוף. בחירה אחרת תדרוס אותם לשורה זו בלבד.</div>':''}${ixTxt}`;
+  actAuto(amt+(ixc&&!ixc.miss&&ixc.diff?ixc.diff:0),pd);
 }
+/* ביצוע בפועל: ממלא את הסכום הצפוי ומועד התשלום המחושב כל עוד המשתמש לא ערך אותם */
+const isoD=d=>d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'';
+function actAutoReset(){['#rActAmt','#rActDate'].forEach(s=>{const el=$(s);el.dataset.auto='';el.classList.remove('autov');});}
+function actAuto(amt,pd){
+  [['#rActAmt',amt?String(Math.round(amt*100)/100):''],['#rActDate',isoD(pd)]].forEach(([s,v])=>{const el=$(s);
+    if(el.value===''||el.dataset.auto==='1'){el.value=v;el.dataset.auto=v?'1':'';el.classList.toggle('autov',!!v);}});
+}
+function bindActAuto(){['#rActAmt','#rActDate'].forEach(s=>$(s).addEventListener('input',()=>{const el=$(s);el.dataset.auto='';el.classList.remove('autov');if(el.value==='')calcPreview();}));}
 function readRow(){
   const type=editing.type, isIn=type==='income';
   const o={
@@ -2278,6 +2290,9 @@ function readRow(){
     actualAmount:$('#rActAmt').value===''?'':Number($('#rActAmt').value)||0,
     actualDate:$('#rActDate').value, status:$('#rStatus').value, notes:$('#rNotes').value.trim()
   };
+  /* ברירת מחדל של ביצוע בפועל נשמרת רק כשהשורה שולמה או כשהמשתמש ערך אחד השדות */
+  const auA=$('#rActAmt').dataset.auto==='1', auD=$('#rActDate').dataset.auto==='1';
+  if(o.status!=='שולם'&&auA&&auD){o.actualAmount='';o.actualDate='';}
   if($('#rLk').value!=='own') o.lk=$('#rLk').value;
   if(!o.desc){toast('חובה להזין תיאור');return null;}
   if(isIn){
@@ -3794,7 +3809,7 @@ const AI_LS='fitout-cashflow-ai';
 const AI_SDK='https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm';
 const AI_MODELS=[['claude-opus-5-5','Claude Opus 5.5 – הכי מדויק (מומלץ)'],['claude-sonnet-5-5','Claude Sonnet 5.5 – זול יותר']];
 const AI_PRICE={'claude-opus-5-5':[4,20],'claude-sonnet-5-5':[2,10]}; // דולר למיליון טוקנים: קלט, פלט
-const SM_KINDS={invoice:'חשבונית / חשבון ספק',bill:'חשבון ביניים של קבלן',paid:'אישור תשלום לספק',recv:'תקבול מהמזמין / יזם',index:'טבלת מדד',other:'אחר – לא לקלוט'};
+const SM_KINDS={invoice:'חשבונית / חשבון ספק',bill:'חשבון ביניים של קבלן',paid:'אישור תשלום לספק',recv:'תקבול מהמזמין / יזם',vdoc:'מסמך קבלן (ביטוח, רישיון, אישורים)',index:'טבלת מדד',other:'אחר – לא לקלוט'};
 function aiCfg(){let o={};try{o=JSON.parse(localStorage.getItem(AI_LS)||'{}')||{};}catch(e){} return Object.assign({key:'',model:'claude-opus-5-5'},o);}
 function aiSet(o){try{localStorage.setItem(AI_LS,JSON.stringify(Object.assign(aiCfg(),o)));}catch(e){toast('השמירה בדפדפן נכשלה: '+e.message,4000);} aiUI();}
 let AI_MOD=null;
@@ -3906,8 +3921,8 @@ function smLocal(text){
 
 /* ---------- קריאה עם Claude ---------- */
 const SM_SCHEMA={type:'object',additionalProperties:false,required:['docs'],properties:{docs:{type:'array',items:{type:'object',additionalProperties:false,
-  required:['kind','party','party_id','doc_no','date','period','amount_net','vat','amount_gross','paid_amount','cumulative','retention','description','confidence','notes','index_series','index_values'],
-  properties:{kind:{type:'string',enum:['invoice','bill','paid','recv','index','other']},party:{type:'string'},party_id:{type:'string'},doc_no:{type:'string'},
+  required:['kind','party','party_id','doc_no','date','period','amount_net','vat','amount_gross','paid_amount','cumulative','retention','description','confidence','notes','index_series','index_values','doc_type','valid_until'],
+  properties:{kind:{type:'string',enum:['invoice','bill','paid','recv','vdoc','index','other']},doc_type:{type:'string',enum:['contract','ins','lic','bank','bankok','tax','books','']},valid_until:{type:'string'},party:{type:'string'},party_id:{type:'string'},doc_no:{type:'string'},
     date:{type:'string'},period:{type:'string'},amount_net:{type:'number'},vat:{type:'number'},amount_gross:{type:'number'},paid_amount:{type:'number'},
     cumulative:{type:'number'},retention:{type:'number'},description:{type:'string'},confidence:{type:'number'},notes:{type:'string'},index_series:{type:'string'},
     index_values:{type:'array',items:{type:'object',additionalProperties:false,required:['month','value'],properties:{month:{type:'string'},value:{type:'number'}}}}}}}}};
@@ -3918,6 +3933,7 @@ kind:
 - bill: a contractor's periodic progress bill showing executed work (חשבון חלקי, חשבון ביניים, חשבון מצטבר).
 - paid: proof that the user paid a supplier or contractor (bank transfer confirmation, אישור תשלום, a receipt / קבלה the supplier issued to the user, a cheque).
 - recv: money the user received from the client or developer (יזם / מזמין / רוכש): bank credit, a receipt the user issued, the developer's payment confirmation.
+- vdoc: a contractor compliance document the contractor or supplier hands the user: signed contract (doc_type contract), insurance certificate אישור קיום ביטוחים (ins), contractor registration רישיון קבלן / רשם הקבלנים (lic), bank details or a cancelled cheque (bank), bank account confirmation אישור ניהול חשבון (bankok), withholding-tax certificate אישור ניכוי מס במקור (tax), bookkeeping certificate אישור ניהול ספרים (books).
 - index: a table or screenshot of price-index values, such as מדד תשומות הבנייה from the Central Bureau of Statistics (הלמ"ס).
 - other: anything else.
 
@@ -3931,7 +3947,8 @@ Rules:
 - description = a short Hebrew description of what the document is for (for example "חשבון חלקי 4 – עבודות שלד").
 - confidence = 0 to 1, how sure you are about kind, party, amount and date together.
 - notes = a short Hebrew note on anything unclear or worth checking, or "".
-- For index: index_series = the series name in Hebrew; index_values = every month/value pair shown, month as YYYY-MM (convert Hebrew month names). When several series appear, use the general residential construction-inputs index (מדד תשומות הבנייה למגורים, כללי) and mention the others in notes. For other kinds, index_series = "" and index_values = [].`;
+- For index: index_series = the series name in Hebrew; index_values = every month/value pair shown, month as YYYY-MM (convert Hebrew month names). When several series appear, use the general residential construction-inputs index (מדד תשומות הבנייה למגורים, כללי) and mention the others in notes. For other kinds, index_series = "" and index_values = [].
+- For vdoc: party = the contractor or supplier the document belongs to (the insured, the licence holder, the account owner), doc_type as listed above, valid_until = the expiry date as YYYY-MM-DD if printed (for insurance, the end of the insurance period), else "". date = issue date. Amounts 0. For other kinds, doc_type = "" and valid_until = "".`;
 function smContext(fname){
   const vs=S.vendors.map(v=>v.name).filter(Boolean), cs=S.clients.map(c=>c.name).filter(Boolean);
   return `File name: ${fname}\nToday: ${todayISO()}\nProject: ${S.settings.projectName||''}\nAmounts in this project are entered ${S.settings.vatMode==='gross'?'including':'excluding'} VAT (VAT rate ${S.settings.vat??18}%).\nKnown suppliers and contractors: ${vs.join(' | ')||'none'}\nKnown clients / developers: ${cs.join(' | ')||'none'}`;
@@ -3974,6 +3991,7 @@ function smCands(it){
 function smDefaultAct(it){
   if(it.err&&!it.kind) return 'skip';
   if(it.kind==='other') return 'skip';
+  if(it.kind==='vdoc') return it.party&&VDOCS.some(x=>x[0]===it.dtype)?'vdoc':'skip';
   if(it.kind==='index') return it.idx&&it.idx.length?'index':'skip';
   if(it.dup) return 'skip';
   if(it.kind==='bill'&&smEc(it)) return 'ec';
@@ -3992,7 +4010,7 @@ function smItem(d,src,fi,cost){
   const k=d.kind, pay=k==='paid'||k==='recv';
   const it={id:uid(),fi,src,cost:cost||0,kind:k,party:d.party||'',partyId:d.party_id||'',docNo:d.doc_no||'',date:/^\d{4}-\d{2}-\d{2}$/.test(d.date||'')?d.date:'',
     period:/^\d{4}-\d{2}$/.test(d.period||'')?d.period:'',gross:Number(d.amount_gross)||0,net:Number(d.amount_net)||0,cum:Number(d.cumulative)||0,ret:Number(d.retention)||0,
-    desc:d.description||'',conf:Number(d.confidence)||0,notes:d.notes||'',series:d.index_series||'',idx:(d.index_values||[]).filter(x=>/^\d{4}-\d{2}$/.test(x.month)&&Number(x.value)>0),on:true};
+    desc:d.description||'',conf:Number(d.confidence)||0,notes:d.notes||'',dtype:d.doc_type||'',exp:/^\d{4}-\d{2}-\d{2}$/.test(d.valid_until||'')?d.valid_until:'',series:d.index_series||'',idx:(d.index_values||[]).filter(x=>/^\d{4}-\d{2}$/.test(x.month)&&Number(x.value)>0),on:true};
   it.amt=pay?smBase(Number(d.paid_amount)||it.gross||0,Number(d.paid_amount)?0:it.net):smBase(it.gross,it.net);
   smRefresh(it); it.on=it.act!=='skip'; return it;
 }
@@ -4040,6 +4058,7 @@ function smOpen(){renderSmart();$('#ovSmart').classList.add('on');}
 function smActOpts(it){
   if(it.kind==='index'){const D=smIdxDiff(it);return [['index',`עדכון «${D.name}»: ${D.add.length} חדשים, ${D.chg.length} שונים מהקיים`],['skip','דילוג']];}
   if(it.kind==='other') return [['skip','לא לקלוט']];
+  if(it.kind==='vdoc'){const l=(VDOCS.find(x=>x[0]===it.dtype)||[])[1];return l?[['vdoc',`שיוך ל«${l}» בכרטיס${it.party?' של «'+it.party+'»':''}${it.exp?' · בתוקף עד '+fmtD(it.exp):''}`],['skip','דילוג']]:[['skip','בחרו סוג מסמך']];}
   const o=[], type=smType(it.kind), what=it.kind==='paid'?'סימון כשולם':it.kind==='recv'?'סימון כהתקבל':'עדכון סכום ותאריך';
   if(it.kind==='bill'){const c=smEc(it); if(c) o.push(['ec',`חשבון ${fmtMonth(it.period||(it.date||'').slice(0,7))} בחוזה הביצוע «${c.desc||c.party}»`]);}
   it.cands.forEach(c=>o.push(['row:'+c.r.id,`${what}: ${c.r.desc||'—'} · ${money(c.r.amount)} · ${fmtD(c.r.date)}${c.da<=.01?' (סכום זהה)':''}`]));
@@ -4054,11 +4073,11 @@ function renderSmart(){
   const nAi=SM.items.filter(i=>i.src==='ai').length, nLoc=SM.items.filter(i=>i.src==='local').length;
   $('#smSum').innerHTML=`${SM.files.length} קבצים · ${SM.items.filter(i=>!i.err).length} מסמכים זוהו${nLoc?` · ${nLoc} נקראו מקומית בחינם`:''}${nAi?` · עלות קריאה משוערת $${SM.cost.toFixed(3)}`:''}
     <span class="mut"> · סכומים ${S.settings.vatMode==='gross'?'כולל':'ללא'} מע״מ, לפי הגדרות הפרויקט</span>`;
-  const warn=(it,f)=>{if(it.kind==='other')return '';const bad=f==='party'?!it.party:f==='amt'?!it.amt&&it.kind!=='index':f==='date'?!it.date&&it.kind!=='index':false;
+  const warn=(it,f)=>{if(it.kind==='other')return '';if(it.kind==='vdoc')return f==='party'&&!it.party||f==='amt'&&!it.dtype?' style="background:#fef9c3"':'';const bad=f==='party'?!it.party:f==='amt'?!it.amt&&it.kind!=='index':f==='date'?!it.date&&it.kind!=='index':false;
     return bad||(it.src!=='manual'&&it.conf<.8&&it.kind!=='other')?' style="background:#fef9c3"':'';};
   $('#tSm').innerHTML=`<thead><tr><th style="width:26px"></th><th>קובץ</th><th>סוג מסמך</th><th>גוף</th><th>מס׳</th><th>תאריך</th><th class="num">סכום</th><th>מה ייעשה</th></tr></thead><tbody>`+
     SM.items.map(it=>{
-      const f=SM.files[it.fi], isIdx=it.kind==='index';
+      const f=SM.files[it.fi], isIdx=it.kind==='index', isVd=it.kind==='vdoc';
       const opts=smActOpts(it);
       const info=[it.err?`<span style="color:var(--neg)">${esc(it.err)}</span>`:'',it.src==='local'?'📄 נקרא מקומית':it.src==='ai'?'🤖 נקרא ע״י Claude'+(it.conf?` · ודאות ${Math.round(it.conf*100)}%`:''):'',
         it.notes?esc(it.notes):'',it.dup?'<b>⚠ מסמך עם אותו מספר כבר נקלט</b>':'',!isIdx&&it.party&&!it.known&&it.kind!=='other'?'גוף חדש – ייפתח כרטיס':'',
@@ -4070,9 +4089,9 @@ function renderSmart(){
         <td style="max-width:170px;white-space:normal;font-size:12px">${esc(f?f.name:'')}</td>
         <td><select class="ti" data-smi="${it.id}" data-smf="kind">${Object.entries(SM_KINDS).map(([k,l])=>`<option value="${k}"${k===it.kind?' selected':''}>${l}</option>`).join('')}</select></td>
         <td${isIdx?'':warn(it,'party')}>${isIdx?`<span class="mut">${esc(it.series||'מדד')}</span>`:`<input class="ti" list="dlSm" data-smi="${it.id}" data-smf="party" value="${esc(it.party)}" style="min-width:150px">`}</td>
-        <td>${isIdx?'':`<input class="ti num" data-smi="${it.id}" data-smf="docNo" value="${esc(it.docNo)}" style="max-width:90px" dir="ltr">`}</td>
-        <td${warn(it,'date')}>${isIdx?'':`<input class="ti" type="date" data-smi="${it.id}" data-smf="date" value="${esc(it.date)}">`}</td>
-        <td${warn(it,'amt')}>${isIdx?`<b>${it.idx.length}</b> ערכים`:`<input class="ti num" type="number" step="0.01" data-smi="${it.id}" data-smf="amt" value="${it.amt||''}" style="max-width:120px">`}</td>
+        <td>${isIdx||isVd?'':`<input class="ti num" data-smi="${it.id}" data-smf="docNo" value="${esc(it.docNo)}" style="max-width:90px" dir="ltr">`}</td>
+        <td${warn(it,'date')}>${isIdx?'':isVd?`<input class="ti" type="date" data-smi="${it.id}" data-smf="exp" value="${esc(it.exp)}" title="בתוקף עד"><div class="mut" style="font-size:10.5px">בתוקף עד</div>`:`<input class="ti" type="date" data-smi="${it.id}" data-smf="date" value="${esc(it.date)}">`}</td>
+        <td${warn(it,'amt')}>${isIdx?`<b>${it.idx.length}</b> ערכים`:isVd?`<select class="ti" data-smi="${it.id}" data-smf="dtype" style="max-width:170px"><option value="">— סוג מסמך —</option>${VDOCS.map(([k,l])=>`<option value="${k}"${k===it.dtype?' selected':''}>${esc(l)}</option>`).join('')}</select>`:`<input class="ti num" type="number" step="0.01" data-smi="${it.id}" data-smf="amt" value="${it.amt||''}" style="max-width:120px">`}</td>
         <td style="min-width:260px"><select class="ti" data-smi="${it.id}" data-smf="act" style="max-width:420px;width:100%">${opts.map(([v,l])=>`<option value="${esc(v)}"${v===it.act?' selected':''}>${esc(l)}</option>`).join('')}</select></td></tr>
         ${info||idxL?`<tr${it.on?'':' style="opacity:.6"'}><td></td><td colspan="7" style="font-size:11.5px;padding-top:0;white-space:normal">${info}${idxL}</td></tr>`:''}`;}).join('')+'</tbody>';
   const n=SM.items.filter(i=>i.on&&i.act!=='skip').length;
@@ -4087,7 +4106,7 @@ function smEdit(e){
   else if(f==='act'){it.act=el.value; if(it.act!=='skip') it.on=true;}
   else if(f==='amt') it.amt=Number(el.value)||0;
   else it[f]=el.value;
-  if(f==='kind'||f==='party'||f==='amt'||f==='date'||f==='docNo'){ if(f==='kind'||f==='party')it.act=''; smRefresh(it,true); if(!it.act)it.act=smDefaultAct(it); if(it.err&&it.party&&(it.amt||it.kind==='index'))it.on=it.act!=='skip'; }
+  if(f==='kind'||f==='party'||f==='amt'||f==='date'||f==='docNo'||f==='dtype'||f==='exp'){ if(f==='dtype'||f==='exp')it.act=''; if(f==='kind'||f==='party')it.act=''; smRefresh(it,true); if(!it.act)it.act=smDefaultAct(it); if(it.err&&it.party&&(it.amt||it.kind==='index'))it.on=it.act!=='skip'; }
   setTimeout(renderSmart,0);
 }
 /* שמירת הקובץ המקורי ליד הגוף (כמו חוזה): נשמר בדפדפן ועולה ל-Drive בסנכרון */
@@ -4104,6 +4123,12 @@ async function smApply(){
     if(!it.on||it.act==='skip') continue;
     if(it.kind==='index'){
       const sk=smIdxSeries(it), s=idxDB().series[sk]; it.idx.forEach(x=>{s.vals[x.month]=x.value;}); idxTouch(sk); n++; msg.push(it.idx.length+' ערכי מדד'); continue;
+    }
+    if(it.kind==='vdoc'){
+      const l=(VDOCS.find(x=>x[0]===it.dtype)||[])[1]; if(!it.party||!l){msg.push('דולג: חסר קבלן או סוג מסמך ('+(SM.files[it.fi]||{}).name+')');continue;}
+      ensureParty('expense',it.party,'','',''); const p=findParty('expense',it.party), id=await smAttach(it.fi,'expense',it.party,l);
+      p.docs=p.docs||{}; p.docs[it.dtype]=Object.assign({},p.docs[it.dtype]||{},{ok:true},it.exp?{exp:it.exp}:{},id?{file:id}:{}); p.updatedAt=Date.now();
+      n++; msg.push(l+' ← '+p.name); continue;
     }
     if(!it.party||(!it.amt&&!(it.kind==='bill'&&it.cum))){msg.push('דולג: חסר גוף או סכום ('+(SM.files[it.fi]||{}).name+')');continue;}
     const type=smType(it.kind), pay=it.kind==='paid'||it.kind==='recv';
@@ -4201,7 +4226,9 @@ function vdFormFill(p){
   $('#pDocs').innerHTML=`<thead><tr><th style="width:30px">✓</th><th>מסמך</th><th>בתוקף עד</th><th>קובץ</th></tr></thead><tbody>`+
     VDOCS.map(([k,l,e])=>{const d=D[k]||{};return `<tr><td><input type="checkbox" data-vd="${k}" data-f="ok"${d.ok?' checked':''}></td><td style="white-space:normal">${esc(l)}</td>
       <td>${e?`<input class="ti" type="date" data-vd="${k}" data-f="exp" value="${esc(d.exp||'')}">`:'<span class="mut">—</span>'}</td>
-      <td><select class="ti" data-vd="${k}" data-f="file" data-v="${esc(d.file||'')}" style="max-width:190px"></select></td></tr>`;}).join('')+'</tbody>';
+      <td style="white-space:nowrap"><select class="ti" data-vd="${k}" data-f="file" data-v="${esc(d.file||'')}" style="max-width:170px"></select>
+        <button type="button" class="btn sm" data-vdup="${k}" title="העלאת קובץ למסמך הזה" style="padding:2px 7px">⬆</button>
+        <button type="button" class="btn sm" data-vdview="${k}" title="צפייה במסמך" style="padding:2px 7px">👁</button></td></tr>`;}).join('')+'</tbody>';
   $('#pFin').innerHTML=VFIN.map(([k,l])=>{const f=F[k]||{};return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
     <label style="display:flex;gap:7px;align-items:center;font-size:13px;min-width:190px"><input type="checkbox" data-vf="${k}" data-f="ok"${f.ok?' checked':''}> ${esc(l)}</label>
     <input class="ti" type="date" data-vf="${k}" data-f="date" value="${esc(f.date||'')}" title="תאריך"></div>`;}).join('');
@@ -4211,7 +4238,9 @@ function vdFileOpts(){
   if(!pEditing||!$('#pDocs')) return;
   $$('#pDocs select[data-f="file"]').forEach(s=>{const v=s.value||s.dataset.v||'';
     s.innerHTML='<option value="">— בחרו קובץ —</option>'+pEditing.files.map(c=>`<option value="${c.id}"${c.id===v?' selected':''}>${esc(c.name)}</option>`).join('');});
+  vdViewSync();
 }
+function vdViewSync(){$$('#pDocs [data-vdview]').forEach(b=>{const s=$(`#pDocs [data-vd="${b.dataset.vdview}"][data-f="file"]`);b.disabled=!(s&&s.value);b.style.opacity=b.disabled?'.35':'';});}
 function vdSync(){const on=$('#pDocsReq').checked;$('#pDocsBox').style.opacity=on?'1':'.55';}
 function vdFormRead(){
   const docs={}, fin={};
@@ -4223,6 +4252,14 @@ function vdFormRead(){
 function bindVdocs(){
   $('#pDocsReq').addEventListener('change',()=>{$('#pDocsReq').dataset.touched='1';vdSync();});
   $('#pRole').addEventListener('change',()=>{if(!$('#pDocsReq').dataset.touched){$('#pDocsReq').checked=VDOC_ROLES.includes($('#pRole').value);vdSync();}});
+  $('#pDocs').addEventListener('click',e=>{
+    const up=e.target.closest('[data-vdup]'); if(up){$('#fiVdoc').dataset.k=up.dataset.vdup;$('#fiVdoc').click();return;}
+    const vw=e.target.closest('[data-vdview]'); if(vw){const s=$(`#pDocs [data-vd="${vw.dataset.vdview}"][data-f="file"]`);if(s&&s.value)viewContract('__edit',s.value);}});
+  $('#fiVdoc').onchange=async e=>{const f=e.target.files[0], k=e.target.dataset.k; e.target.value=''; if(!f||!k||!pEditing) return;
+    const n=pEditing.files.length; await addContractFiles([f]); const c=pEditing.files[n]; if(!c) return;
+    const lab=(VDOCS.find(x=>x[0]===k)||[])[1]; if(lab&&!c.name.startsWith(lab)) c.name=lab+' – '+c.name;
+    const s=$(`#pDocs [data-vd="${k}"][data-f="file"]`); vdFileOpts(); s.value=c.id; $(`#pDocs [data-vd="${k}"][data-f="ok"]`).checked=true; vdViewSync(); renderPFiles(); s.value=c.id; vdViewSync();};
+  $('#pDocs').addEventListener('change',vdViewSync);
   $('#pDocs').addEventListener('change',e=>{const el=e.target; if(el.dataset.f==='file'&&el.value){const ok=$(`#pDocs [data-vd="${el.dataset.vd}"][data-f="ok"]`);if(ok)ok.checked=true;}
     if(el.dataset.f==='exp'&&el.value){const ok=$(`#pDocs [data-vd="${el.dataset.vd}"][data-f="ok"]`);if(ok)ok.checked=true;}});
   $('#pFin').addEventListener('change',e=>{const el=e.target;if(el.dataset.f==='ok'&&el.checked){const d=$(`#pFin [data-vf="${el.dataset.vf}"][data-f="date"]`);if(d&&!d.value)d.value=todayISO();}});
@@ -5038,7 +5075,7 @@ function bind(){
   };
 
   // party modal
-  bindPartyModal(); bindDrive(); bindReports(); bindListViews(); bindAlerts(); bindIdx(); bindExec(); bindDev(); bindSmart(); bindVenGroup(); bindVdocs(); $('#rLk').addEventListener('change',calcPreview);
+  bindPartyModal(); bindDrive(); bindReports(); bindListViews(); bindAlerts(); bindIdx(); bindExec(); bindDev(); bindSmart(); bindVenGroup(); bindVdocs(); bindActAuto(); $('#rLk').addEventListener('change',calcPreview);
   $('#qCli').oninput=renderParties; $('#qVen').oninput=renderParties;
   $('#pSave').onclick=()=>{
     const name=$('#pName').value.trim(); if(!name) return toast('חובה להזין שם');
