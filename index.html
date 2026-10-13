@@ -4821,7 +4821,7 @@ function rpBud(){
         return {party:n,ch:'',lines:L.length,budget:0,sell:'',commit:'',forecast:r2(f),actual:a?r2(a):'',rest:r2(-f),use:'',st:'ללא תקציב',_late:true,_al:ALP.has(n)?{pct:ALP.get(n).pct,crit:ALP.get(n).crit}:null};})});}
   }));
   return {title:'דוח בקרת תקציב – נכון ל-'+fmtD(new Date()),
-    cols:[['party','קבלן / ספק'],['ch','פרקים'],['lines','סעיפים','n'],['budget','תקציב עלות','m'],['sell','מועמס','m'],['commit','התקשרות','m'],['forecast','צפי בתזרים','m'],['actual','שולם בפועל','m'],['rest','יתרת תקציב','m'],['use','% ניצול','pct0'],['st','סטטוס']],
+    cols:[['party','קבלן / ספק'],['ch','פרקים'],['lines','סעיפים','n'],['budget','תקציב עלות','m'],['sell','מועמס','m','xls'],['commit','התקשרות','m'],['forecast','צפי בתזרים','m'],['actual','שולם בפועל','m'],['rest','יתרת תקציב','m'],['use','% ניצול','pct0'],['st','סטטוס']],
     groups,sumCols:['lines','budget','sell','commit','forecast','actual','rest'],
     kpis:[['תקציב עלות',money(T.budget)],['התקשרויות',money(T.commit)+(T.budget?' · '+Math.round(T.commit/T.budget*100)+'%':'')],['צפי בתזרים',money(T.forecast)],['שולם בפועל',money(T.actual)+(T.budget?' · '+Math.round(T.actB/T.budget*100)+'% מהתקציב':'')],['חריגות',T.n?money(T.over)+' · '+T.n+' שורות':'אין']],
     empty:'לא הועלה תקציב לפרויקטים שנבחרו. מעלים תקציב בלשונית "תקציב ובקרה".',
