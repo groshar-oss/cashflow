@@ -773,6 +773,18 @@ tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
         </div>
       </div>
 
+      <div data-vo>
+        <div class="sec-t">📋 מסמכי קבלן</div>
+        <label style="display:flex;gap:7px;align-items:center;font-size:13px"><input type="checkbox" id="pDocsReq"> נדרש סט מסמכים מהגוף הזה (ברירת מחדל לקבלן ראשי וקבלן משנה)</label>
+        <div id="pDocsBox">
+          <div class="tbl-scroll" style="margin-top:6px"><table class="t" id="pDocs"></table></div>
+          <div class="mut" style="font-size:11.5px;margin-top:4px">מעלים את הקבצים באזור "הסכמים וחוזים" למעלה, ומשייכים כאן כל קובץ למסמך שלו. אישור או תשלום לקבלן עם מסמכים חסרים יבקש אישור מפורש.</div>
+        </div>
+        <div class="sec-t">🏁 סגירת חשבון סופי</div>
+        <div class="mut" style="font-size:12px">חשבון סופי של הגוף הזה יאושר רק אחרי ששני התנאים מסומנים.</div>
+        <div id="pFin"></div>
+      </div>
+
       <div style="margin-top:14px"><label class="f">הערות (מס' חוזה, הערות כלליות)</label><textarea class="i" id="pNotes" rows="2"></textarea></div>
     </div>
     <div class="modal-f">
@@ -1582,7 +1594,9 @@ function renderRows(type){
     return `<tr${LVSEL[type].has(r.id)?' style="background:#eef4ff"':''}>
       <td><input type="checkbox" data-lvsel="${r.id}"${LVSEL[type].has(r.id)?' checked':''}></td>
       <td><b>${esc(r.desc||'—')}</b>${r.docId?` <button class="btn ghost sm" data-fview="${r.docId}" data-pid="" title="מסמך מקור" style="padding:0 4px">📎</button>`:''}${r.notes?`<div class="mut" style="font-size:11.5px">${esc(r.notes)}</div>`:''}</td>
-      <td>${esc(r.party||'—')}</td>
+      <td>${esc(r.party||'—')}${isIn?'':(()=>{const vp=findParty('expense',r.party); if(!vp||vdApproving(r)||r.status==='בוטל') return '';
+        const fm=r.kind==='חשבון סופי'?vdFinalMissing(vp):[], s=vdReq(vp)?vdState(vp):null;
+        return (s&&s.miss.length?`<div><span class="chip r xs" title="${esc('חסרים: '+s.miss.join(', '))}">⚠ חסרים מסמכים</span></div>`:'')+(fm.length?`<div><span class="chip y xs" title="${esc('חסר: '+fm.join(', '))}">🏁 ממתין ל${esc(fm.join(' ול'))}</span></div>`:'');})()}</td>
       ${isIn?'':`<td><span class="chip">${esc(r.cat||'—')}</span></td>`}
       <td class="mut">${esc(r.kind||'—')}</td>
       <td class="num"><b>${money(r.amount)}</b>${(()=>{const c=idxCalc(r,type);return !c?'':c.miss?'<div class="mut" style="font-size:11px">📈 חסר מדד</div>':c.diff?`<div style="font-size:11px" class="${c.diff>0?'neg':'pos'}" title="הפרש הצמדה למדד ${esc(fmtMonth(c.m))}${c.est?' (הערכה)':''}">📈 ${c.diff>0?'+':''}${money(c.diff)}</div>`:'';})()}</td>
@@ -1633,6 +1647,14 @@ function lvMove(type){
   const sel=rowsOf(type).filter(r=>LVSEL[type].has(r.id)); if(!sel.length) return;
   const from=new Set(sel.map(r=>(r[fld]||'').trim()));
   if(!confirm(`להעביר ${sel.length} שורות ל«${to}»?`)) return;
+  if(fld==='status'&&!isIn&&VD_APPROVE.includes(to)){
+    const fin=sel.filter(r=>r.kind==='חשבון סופי'&&!vdApproving(r)&&vdFinalMissing(findParty('expense',r.party)).length&&findParty('expense',r.party));
+    if(fin.length){toast(fin.length+' חשבונות סופיים לא הועברו: חסרים תיק מתקן או ניקוי ריג׳קטים',6000); fin.forEach(r=>LVSEL[type].delete(r.id));}
+    const rest=sel.filter(r=>!fin.includes(r)), bad=[...new Set(rest.filter(r=>!vdApproving(r)).map(r=>findParty('expense',r.party)).filter(p=>p&&vdReq(p)&&vdState(p).miss.length).map(p=>p.name))];
+    if(bad.length&&!confirm('לקבלנים הבאים חסרים מסמכים: '+bad.join(', ')+'.\nלאשר בכל זאת?')) return;
+    rest.forEach(r=>{if(bad.includes(r.party)&&!vdApproving(r))vdNote(r);});
+    sel.splice(0,sel.length,...rest); if(!sel.length){render();return;}
+  }
   sel.forEach(r=>{r[fld]=to;});
   if(fld==='cat'&&!S.settings.cats.includes(to)) S.settings.cats.push(to);
   if(fld==='party') ensureParty(type,to,'','',sel[0].cat||'');
@@ -1706,7 +1728,7 @@ function renderParties(){
       const A=ALP.get(p.name);
       const roles=ROLES_V.includes(p.role||'')||!p.role?ROLES_V:[p.role].concat(ROLES_V);
       return `<tr${A?alRowAttr(A.pct,A.crit):''}><td><b>${esc(p.name)}</b>${A?` <b>${A.crit?'⚠ ':''}${A.pct!=null?'+'+fmtPct(A.pct):''}</b>`:''}
-          <div class="pc" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select class="ti" data-vrole="${p.id}" title="סוג הגוף" style="width:auto;max-width:150px;padding:2px 6px;font-size:12px">${(p.role?'':'<option value="" selected>— סוג —</option>')+roles.map(r=>`<option${r===p.role?' selected':''}>${esc(r)}</option>`).join('')}</select>${p.contact?'👤 '+esc(p.contact):''}</div>
+          <div class="pc" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select class="ti" data-vrole="${p.id}" title="סוג הגוף" style="width:auto;max-width:150px;padding:2px 6px;font-size:12px">${(p.role?'':'<option value="" selected>— סוג —</option>')+roles.map(r=>`<option${r===p.role?' selected':''}>${esc(r)}</option>`).join('')}</select>${vdChip(p)}${p.contact?'👤 '+esc(p.contact):''}</div>
           ${p.filledFrom?`<div class="pc">✨ פרטים מ«${esc(p.filledFrom)}»</div>`:''}${p.notes?`<div class="pc">${esc(p.notes)}</div>`:''}</td>
         <td class="pc">${tel(p.phone)}</td>
         <td class="pc">${mail(p.email)||'—'}${p.email2?'<br>'+mail(p.email2):''}</td>
@@ -2263,6 +2285,7 @@ function readRow(){
     if(o.base&&!contractTotal()){S.settings.contractTotal=o.base;syncSettingsUI();}
   }
   if(!o.amount&&o.actualAmount===''){toast('חובה להזין סכום');return null;}
+  if(!isIn){const g=vdGate(editing.id?rowsOf(type).find(x=>x.id===editing.id):null,o); if(!g) return null; if(g==='over') vdNote(o);}
   ensureParty(type,o.party,o.terms,o.basis,o.cat);
   return o;
 }
@@ -2356,7 +2379,7 @@ function openParty(type,id){
   $('#dlBanks').innerHTML=BANKS.map(b=>`<option value="${esc(b)}">`).join('');
   $('#pSuggest').style.display='none';
   $('#pDrvNote').textContent=DRV.enabled?'· נשמרים גם ב-Google Drive':'· נשמרים בדפדפן (חברו את Drive כדי לשמור בענן)';
-  renderPFiles();
+  renderPFiles(); vdFormFill(p);
   $('#ovParty').classList.add('on'); setTimeout(()=>$('#pName').focus(),40);
 }
 function dirSuggest(exactOnly){
@@ -2395,6 +2418,7 @@ function renderPFiles(){
       <button class="btn sm" data-fview="${c.id}" data-pid="__edit">👁️ צפייה</button>
       <button class="btn sm danger" data-frm="${c.id}">✕</button></div>`).join('')
     :'<div class="mut" style="font-size:12.5px">לא הועלו עדיין חוזים לגוף זה.</div>';
+  vdFileOpts();
 }
 async function addContractFiles(files){
   for(const f of files){
@@ -3569,6 +3593,11 @@ function bindExec(){
   $('#ovEc').addEventListener('change',e=>{
     const el=e.target.closest('[data-ecb]');
     if(el){const b=ECED.bills.find(x=>x.id===el.dataset.ecb), f=el.dataset.f;
+      if(f==='st'&&(ECED.type||'expense')==='expense'&&['אושר','שולם'].includes(el.value)&&!['אושר','שולם'].includes(b.st)){
+        const vp=findParty('expense',ECED.party), last=ECED.bills.slice().sort((a,c)=>a.month.localeCompare(c.month)).pop()===b, fm=vp?vdFinalMissing(vp):[];
+        if(last&&fm.length){toast('החשבון הסופי יאושר רק אחרי: '+fm.join(' ו')+'. מסמנים בכרטיס הקבלן.',6000);el.value=b.st;return;}
+        if(vp&&vdReq(vp)&&vdState(vp).miss.length&&!confirm('ל«'+vp.name+'» חסרים מסמכים: '+vdState(vp).miss.join(', ')+'.\nלאשר בכל זאת?')){el.value=b.st;return;}
+      }
       if(f==='pct'){ecReadHead();b.cum=r2((Number(ECED.total)||0)*Number(el.value)/100);} else if(f==='cum') b.cum=Number(el.value)||0; else b[f]=el.value;
       ECED.bills.sort((a,b)=>a.month.localeCompare(b.month));}
     else ecReadHead();
@@ -4033,7 +4062,8 @@ function renderSmart(){
       const opts=smActOpts(it);
       const info=[it.err?`<span style="color:var(--neg)">${esc(it.err)}</span>`:'',it.src==='local'?'📄 נקרא מקומית':it.src==='ai'?'🤖 נקרא ע״י Claude'+(it.conf?` · ודאות ${Math.round(it.conf*100)}%`:''):'',
         it.notes?esc(it.notes):'',it.dup?'<b>⚠ מסמך עם אותו מספר כבר נקלט</b>':'',!isIdx&&it.party&&!it.known&&it.kind!=='other'?'גוף חדש – ייפתח כרטיס':'',
-        it.kind==='bill'&&it.cum?`ביצוע מצטבר ${money(it.cum)}`:''].filter(Boolean).join(' · ');
+        it.kind==='bill'&&it.cum?`ביצוע מצטבר ${money(it.cum)}`:'',
+        (()=>{const vp=it.kind!=='recv'&&it.party?findParty('expense',it.party):null;return vp&&vdReq(vp)&&vdState(vp).miss.length?'<span style="color:var(--neg)">⚠ לקבלן חסרים מסמכים</span>':'';})()].filter(Boolean).join(' · ');
       const idxL=isIdx?(()=>{const D=smIdxDiff(it);return `<div class="mut" style="font-size:11.5px;margin-top:3px">${it.idx.slice(0,24).map(x=>{const c=D.chg.find(y=>y.month===x.month);
         return `${esc(fmtMonth(x.month))}: <b>${x.value}</b>${c?` <span style="color:var(--neg)">(היה ${c.old})</span>`:D.add.includes(x)?' <span style="color:var(--pos)">חדש</span>':''}`;}).join(' · ')}${it.idx.length>24?' …':''}</div>`;})():'';
       return `<tr${it.on?'':' style="opacity:.6"'}><td><input type="checkbox" data-smi="${it.id}" data-smf="on"${it.on?' checked':''}></td>
@@ -4096,7 +4126,8 @@ async function smApply(){
       rowsOf(type).push(r);
     }
     if(pay){r.actualAmount=it.amt;r.actualDate=it.date||todayISO();r.status='שולם';}
-    else{r.amount=it.amt; if(it.date)r.date=it.date; if(it.period&&!r.workMonth)r.workMonth=it.period; if(r.status==='צפוי')r.status='נדרש תשלום';}
+    else{r.amount=it.amt; if(it.date)r.date=it.date; if(it.period&&!r.workMonth)r.workMonth=it.period;
+      if(r.status==='צפוי'){const fm=r.kind==='חשבון סופי'?vdFinalMissing(findParty('expense',r.party)):[]; if(fm.length) msg.push('חשבון סופי של '+r.party+' נשאר "צפוי": חסר '+fm.join(', ')); else r.status='נדרש תשלום';}}
     if(it.docNo){r.docNo=it.docNo; if(!String(r.notes||'').includes(it.docNo)) r.notes=[r.notes,(pay?'אסמכתא ':'מסמך ')+it.docNo].filter(Boolean).join(' · ');}
     if(docId) r.docId=docId;
     n++;
@@ -4126,6 +4157,94 @@ function bindSmart(){
     finally{b.disabled=false;}
   };
   aiUI();
+}
+
+/* =================== מסמכי קבלן וסגירת חשבון סופי =================== */
+/* סט מסמכים חובה לקבלן, ותנאים לאישור חשבון סופי. נשמר בכרטיס הספק: p.docs={k:{ok,exp,file}}, p.fin={k:{ok,date}}, p.docsReq */
+const VDOCS=[['contract','חוזה חתום',0],['ins','אישור ביטוח',1],['lic','רישיון קבלן (רשם הקבלנים)',1],['bank','פרטי חשבון בנק',0],
+  ['bankok','אישור ניהול חשבון',1],['tax','אישור ניכוי מס במקור',1],['books','אישור ניהול ספרים',1]];
+const VFIN=[['asmade','תיק מתקן (As-Made)'],['rejects','ניקוי ריג׳קטים']];
+const VDOC_ROLES=['קבלן ראשי','קבלן משנה'];
+const VD_APPROVE=['מאושר','נדרש תשלום','שולם'];
+function vdReq(p){return !!p&&(p.docsReq!=null?!!p.docsReq:VDOC_ROLES.includes(p.role||''));}
+function vdState(p){
+  const D=(p&&p.docs)||{}, t=todayISO(), soon=new Date(Date.now()+30*864e5).toISOString().slice(0,10), miss=[], warn=[];
+  VDOCS.forEach(([k,l,e])=>{const d=D[k]||{};
+    if(!d.ok) miss.push(l); else if(e&&d.exp&&d.exp<t) miss.push(l+' (פג תוקף)'); else if(e&&d.exp&&d.exp<=soon) warn.push(l+' (עד '+fmtD(d.exp)+')');});
+  return {req:vdReq(p),miss,warn,have:VDOCS.length-miss.length,total:VDOCS.length};
+}
+function vdFinalMissing(p){const F=(p&&p.fin)||{};return VFIN.filter(([k])=>!(F[k]&&F[k].ok)).map(x=>x[1]);}
+function vdChip(p){
+  if(!vdReq(p)) return '';
+  const s=vdState(p), cls=s.miss.length?'r':s.warn.length?'y':'g';
+  const tip=s.miss.length?'חסרים: '+s.miss.join(', '):s.warn.length?'עומד לפוג: '+s.warn.join(', '):'כל המסמכים התקבלו';
+  return `<button class="chip ${cls}" data-ped="${p.id}" data-pt="vendor" title="${esc(tip)}" style="border:0;cursor:pointer">📋 מסמכים ${s.have}/${s.total}</button>`;
+}
+const vdApproving=r=>!!r&&(VD_APPROVE.includes(r.status)||isPaid(r));
+/* לפני אישור או תשלום של שורת הוצאה. false = לעצור; 'over' = אושר למרות מסמכים חסרים */
+function vdGate(prev,next){
+  const p=findParty('expense',next.party); if(!p||!vdApproving(next)) return true;
+  const was=vdApproving(prev);
+  if(next.kind==='חשבון סופי'&&(!was||(prev&&prev.kind!=='חשבון סופי'))){
+    const fm=vdFinalMissing(p);
+    if(fm.length){toast(`חשבון סופי של «${p.name}» יאושר רק אחרי: ${fm.join(' ו')}. מסמנים זאת בכרטיס הקבלן.`,6500);return false;}
+  }
+  if(was) return true;
+  const s=vdState(p); if(!s.req||!s.miss.length) return true;
+  return confirm(`ל«${p.name}» חסרים מסמכי קבלן:\n${s.miss.join('\n')}\n\nלאשר את התשלום בכל זאת?`)?'over':false;
+}
+function vdNote(o){const t='אושר בלי סט מסמכים מלא ('+fmtD(todayISO())+')';o.notes=[o.notes,t].filter(Boolean).join(' · ');}
+/* טופס בכרטיס הספק */
+function vdFormFill(p){
+  const D=(p&&p.docs)||{}, F=(p&&p.fin)||{};
+  $('#pDocsReq').checked=p?vdReq(p):VDOC_ROLES.includes($('#pRole').value); $('#pDocsReq').dataset.touched=p&&p.docsReq!=null?'1':'';
+  $('#pDocs').innerHTML=`<thead><tr><th style="width:30px">✓</th><th>מסמך</th><th>בתוקף עד</th><th>קובץ</th></tr></thead><tbody>`+
+    VDOCS.map(([k,l,e])=>{const d=D[k]||{};return `<tr><td><input type="checkbox" data-vd="${k}" data-f="ok"${d.ok?' checked':''}></td><td style="white-space:normal">${esc(l)}</td>
+      <td>${e?`<input class="ti" type="date" data-vd="${k}" data-f="exp" value="${esc(d.exp||'')}">`:'<span class="mut">—</span>'}</td>
+      <td><select class="ti" data-vd="${k}" data-f="file" data-v="${esc(d.file||'')}" style="max-width:190px"></select></td></tr>`;}).join('')+'</tbody>';
+  $('#pFin').innerHTML=VFIN.map(([k,l])=>{const f=F[k]||{};return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+    <label style="display:flex;gap:7px;align-items:center;font-size:13px;min-width:190px"><input type="checkbox" data-vf="${k}" data-f="ok"${f.ok?' checked':''}> ${esc(l)}</label>
+    <input class="ti" type="date" data-vf="${k}" data-f="date" value="${esc(f.date||'')}" title="תאריך"></div>`;}).join('');
+  vdFileOpts(); vdSync();
+}
+function vdFileOpts(){
+  if(!pEditing||!$('#pDocs')) return;
+  $$('#pDocs select[data-f="file"]').forEach(s=>{const v=s.value||s.dataset.v||'';
+    s.innerHTML='<option value="">— בחרו קובץ —</option>'+pEditing.files.map(c=>`<option value="${c.id}"${c.id===v?' selected':''}>${esc(c.name)}</option>`).join('');});
+}
+function vdSync(){const on=$('#pDocsReq').checked;$('#pDocsBox').style.opacity=on?'1':'.55';}
+function vdFormRead(){
+  const docs={}, fin={};
+  VDOCS.forEach(([k,,e])=>{const g=f=>$(`#pDocs [data-vd="${k}"][data-f="${f}"]`);
+    const o={ok:g('ok').checked}; if(e&&g('exp').value)o.exp=g('exp').value; if(g('file').value)o.file=g('file').value; if(o.ok||o.exp||o.file)docs[k]=o;});
+  VFIN.forEach(([k])=>{const g=f=>$(`#pFin [data-vf="${k}"][data-f="${f}"]`);const o={ok:g('ok').checked};if(g('date').value)o.date=g('date').value;if(o.ok||o.date)fin[k]=o;});
+  const out={docs,fin}; if($('#pDocsReq').dataset.touched) out.docsReq=$('#pDocsReq').checked; return out;
+}
+function bindVdocs(){
+  $('#pDocsReq').addEventListener('change',()=>{$('#pDocsReq').dataset.touched='1';vdSync();});
+  $('#pRole').addEventListener('change',()=>{if(!$('#pDocsReq').dataset.touched){$('#pDocsReq').checked=VDOC_ROLES.includes($('#pRole').value);vdSync();}});
+  $('#pDocs').addEventListener('change',e=>{const el=e.target; if(el.dataset.f==='file'&&el.value){const ok=$(`#pDocs [data-vd="${el.dataset.vd}"][data-f="ok"]`);if(ok)ok.checked=true;}
+    if(el.dataset.f==='exp'&&el.value){const ok=$(`#pDocs [data-vd="${el.dataset.vd}"][data-f="ok"]`);if(ok)ok.checked=true;}});
+  $('#pFin').addEventListener('change',e=>{const el=e.target;if(el.dataset.f==='ok'&&el.checked){const d=$(`#pFin [data-vf="${el.dataset.vf}"][data-f="date"]`);if(d&&!d.value)d.value=todayISO();}});
+}
+/* דוח: מסמכי קבלנים וסגירת חשבון סופי */
+function rpDocs(){
+  const scope=rpScope(), multi=scope.length>1, groups=[]; let nm=0, nr=0, nf=0;
+  scope.forEach(pr=>withProj(pr,()=>{
+    const rows=S.vendors.filter(vdReq).map(p=>{const s=vdState(p), D=p.docs||{};nr++; if(s.miss.length)nm++;
+      const fin=S.expenses.filter(r=>r.party===p.name&&r.kind==='חשבון סופי'&&r.status!=='בוטל'), fm=vdFinalMissing(p); if(fin.length&&fm.length)nf++;
+      const o={proj:pname(pr),party:p.name,role:p.role||'',have:s.have+'/'+s.total,miss:s.miss.join(', ')||'✓ הכול התקבל',warn:s.warn.join(', '),
+        fin:fin.length?(fm.length?'חסר: '+fm.join(', '):'✓ ניתן לאשר'):'—',_late:s.miss.length>0||(fin.length&&fm.length>0)};
+      VDOCS.forEach(([k,,e])=>{const d=D[k]||{};o['d_'+k]=d.ok?(e&&d.exp?(d.exp<todayISO()?'✗ פג ':'✓ ')+fmtD(d.exp):'✓'):'✗';});
+      return o;}).sort((a,b)=>(b._late?1:0)-(a._late?1:0)||a.party.localeCompare(b.party,'he'));
+    if(rows.length) groups.push({title:multi?pname(pr):'',info:'',rows});
+  }));
+  return {title:'דוח מסמכי קבלנים וסגירת חשבון סופי – נכון ל-'+fmtD(new Date()),
+    cols:[['party','קבלן'],['role','סוג'],['have','התקבלו'],...VDOCS.map(([k,l])=>['d_'+k,l]),['miss','חסרים'],['warn','עומד לפוג (30 יום)'],['fin','חשבון סופי']],
+    groups,sumCols:[],
+    kpis:[['קבלנים שנדרש מהם סט',String(nr)],['עם מסמכים חסרים',String(nm)],['חשבון סופי ממתין לתיק מתקן / ריג׳קטים',String(nf)]],
+    empty:'אין קבלנים שנדרש מהם סט מסמכים. סט נדרש אוטומטית מקבלן ראשי ומקבלן משנה, ואפשר לסמן אותו גם לגוף אחר בכרטיס שלו.',
+    note:'סט המסמכים נדרש מכל קבלן ראשי וקבלן משנה (וכל גוף שסומן בכרטיס). אישור או תשלום של שורה לקבלן עם מסמכים חסרים מבקש אישור מפורש ונרשם בהערות השורה. חשבון סופי לא מאושר בלי תיק מתקן וניקוי ריג׳קטים.'};
 }
 
 /* ---------- export ---------- */
@@ -4474,7 +4593,7 @@ function rpChg(){
 }
 
 /* =================== דוחות =================== */
-const RP_TYPES=[['pay','תשלומים חודשי לספקים וקבלנים'],['inc','הכנסות חודשי (גבייה מלקוחות)'],['late','גבייה באיחור (חשבונות שמועדם עבר)'],['bal','יתרות לספקים וקבלנים'],['fc','תחזית מזומנים (3 / 6 / 12 חודשים)'],['ret','עיכבונות וערבויות'],['bud','בקרת תקציב לפי מלאכה וקבלן'],['chg','חריגות ושינויים (התראות ויומן)'],['idx','הצמדה למדד וחשיפה'],['exec','חשבונות ביצוע'],['units','מכירות ודירות'],['bank','ליווי בנקאי']];
+const RP_TYPES=[['docs','מסמכי קבלנים וסגירת חשבון סופי'],['pay','תשלומים חודשי לספקים וקבלנים'],['inc','הכנסות חודשי (גבייה מלקוחות)'],['late','גבייה באיחור (חשבונות שמועדם עבר)'],['bal','יתרות לספקים וקבלנים'],['fc','תחזית מזומנים (3 / 6 / 12 חודשים)'],['ret','עיכבונות וערבויות'],['bud','בקרת תקציב לפי מלאכה וקבלן'],['chg','חריגות ושינויים (התראות ויומן)'],['idx','הצמדה למדד וחשיפה'],['exec','חשבונות ביצוע'],['units','מכירות ודירות'],['bank','ליווי בנקאי']];
 let RPT=null; // הדוח האחרון שהוצג (לייצוא)
 function withProj(p,fn){const keep=S;S=p.data;try{return fn();}finally{S=keep;}}
 function rpScope(){const v=$('#rpProj').value;return v==='__all'?DB.projects.slice():DB.projects.filter(p=>p.id===v);}
@@ -4752,7 +4871,7 @@ function renderReport(){
   $('#rpMonthW').style.display=monthly||t==='fc'?'':'none'; $('#rpOpenW').style.display=monthly?'flex':'none'; $('#rpHorW').style.display=t==='fc'?'':'none'; $('#rpChgW').style.display=t==='chg'?'':'none'; $('#rpRateW').style.display=t==='idx'?'':'none';
   $('#rpMonthL').textContent=t==='fc'?'מחודש':'חודש';
   $('#rpOpenL').textContent=t==='inc'?'כולל חשבונות פתוחים שמועד הגבייה שלהם עבר':'כולל תשלומים פתוחים מחודשים קודמים';
-  const R=t==='pay'?rpMonthly('expense'):t==='inc'?rpMonthly('income'):t==='late'?rpLate():t==='fc'?rpForecast():t==='ret'?rpRet():t==='bud'?rpBud():t==='chg'?rpChg():t==='idx'?rpIdx():t==='exec'?rpExec():t==='units'?rpUnits():t==='bank'?rpBank():rpBal();
+  const R=t==='pay'?rpMonthly('expense'):t==='inc'?rpMonthly('income'):t==='late'?rpLate():t==='fc'?rpForecast():t==='ret'?rpRet():t==='bud'?rpBud():t==='chg'?rpChg():t==='idx'?rpIdx():t==='exec'?rpExec():t==='units'?rpUnits():t==='docs'?rpDocs():t==='bank'?rpBank():rpBal();
   const scope=rpScope(); R.sub=(scope.length>1?'כל הפרויקטים ('+scope.length+')':pname(scope[0]))+' · הופק ב-'+new Date().toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'});
   RPT=R;
   const RC=R.cols.filter(c=>c[3]!=='xls'), nc=RC.length, sumOf=(rows,c)=>R.sumCols.includes(c[0])?cellTxt(c,r2(sumK(rows,c[0]))):'';
@@ -4919,7 +5038,7 @@ function bind(){
   };
 
   // party modal
-  bindPartyModal(); bindDrive(); bindReports(); bindListViews(); bindAlerts(); bindIdx(); bindExec(); bindDev(); bindSmart(); bindVenGroup(); $('#rLk').addEventListener('change',calcPreview);
+  bindPartyModal(); bindDrive(); bindReports(); bindListViews(); bindAlerts(); bindIdx(); bindExec(); bindDev(); bindSmart(); bindVenGroup(); bindVdocs(); $('#rLk').addEventListener('change',calcPreview);
   $('#qCli').oninput=renderParties; $('#qVen').oninput=renderParties;
   $('#pSave').onclick=()=>{
     const name=$('#pName').value.trim(); if(!name) return toast('חובה להזין שם');
@@ -4928,6 +5047,7 @@ function bind(){
       cat:pEditing.type==='vendor'?$('#pCat').value:'',retention:Number($('#pRet').value)||0,notes:$('#pNotes').value.trim(),
       contact:$('#pContact').value.trim(),phone:$('#pPhone').value.trim(),email:$('#pEmail').value.trim(),
       contracts:pEditing.files.slice(),idx:idxFormRead('pIdx'),updatedAt:Date.now()};
+    if(pEditing.type==='vendor') Object.assign(o,vdFormRead());
     if(pEditing.type==='vendor') Object.assign(o,{email2:$('#pEmail2').value.trim(),bankName:$('#pBank').value.trim(),
       bankBranch:$('#pBranch').value.trim(),bankAcct:$('#pAcct').value.trim()});
     if(pEditing.filledFrom) o.filledFrom=pEditing.filledFrom;
@@ -5094,7 +5214,7 @@ function bind(){
 load(); bind(); syncSettingsUI(); render(); drvBoot();
 if(DB.view==='all'&&DB.projects.length>1) switchProject('__all');
 if(typeof Chart==='undefined') setTimeout(()=>{if(typeof Chart==='undefined')$('#chFallback').style.display='block';else render();},1500);
-window.CF={smRun,smItem,smApply,renderSmart,aiCfg,aiSet,get SM(){return SM;},alList,alTrack,openAlerts,idxCalc,idxDiff,idxDB,ecCalc,ecApply,devApply,devBankSim,devD,fxApply,openEc,renderExec,get S(){return S;},get DRV(){return DRV;},drvSync,drvSyncFiles,dirLookup,fget,openParty,classifyTrade,budParties,openSpread,get DB(){return DB;},switchProject,newProject,compute,payDate,parseNum,parseDate,parseTerms,parseDelimited,demo,save,render,
+window.CF={openRow,smRun,smItem,smApply,renderSmart,aiCfg,aiSet,get SM(){return SM;},alList,alTrack,openAlerts,idxCalc,idxDiff,idxDB,ecCalc,ecApply,devApply,devBankSim,devD,fxApply,openEc,renderExec,get S(){return S;},get DRV(){return DRV;},drvSync,drvSyncFiles,dirLookup,fget,openParty,classifyTrade,budParties,openSpread,get DB(){return DB;},switchProject,newProject,compute,payDate,parseNum,parseDate,parseTerms,parseDelimited,demo,save,render,
   add(type,o){rowsOf(type).push(Object.assign({id:uid(),status:'צפוי',terms:'',basis:'',actualAmount:'',actualDate:''},o));save();render();}};
 </script>
 </body>
