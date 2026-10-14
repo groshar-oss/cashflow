@@ -752,6 +752,8 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
         <div><label class="f">מועד חישוב התשלום</label><select class="i" id="pBasis"></select></div>
         <div id="wrapPCat"><label class="f">סעיף תקציב ברירת מחדל</label><select class="i" id="pCat"></select></div>
         <div><label class="f">% עיכבון / ערבות</label><input class="i num" id="pRet" type="number" step="0.1" placeholder="0"></div>
+        <div data-vo><label class="f">אופן פריסה לתזרים</label><select class="i" id="pSpMode"><option value="">לפי תפקיד (יועצים: תחילה וסוף, אחרים: חודשי)</option><option value="m">חודשי שווה</option><option value="se">תשלום בתחילה ובסוף</option><option value="ms">אבני דרך</option></select></div>
+        <div data-vo id="wrapPSpPct"><label class="f">% בתשלום הראשון</label><input class="i num" id="pSpPct" type="number" step="0.1" min="0" max="100" placeholder="לפי ההסכם עם הספק"></div>
       </div>
 
       <div class="sec-t">📈 הצמדה למדד</div>
@@ -1014,13 +1016,22 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
   <div class="modal" style="max-width:620px">
     <div class="modal-h"><h3 id="spTitle">פריסת התקציב לתזרים</h3><div class="spacer"></div><button class="x" data-close>✕</button></div>
     <div class="modal-b">
-      <p class="mut" style="margin-top:0">לכל קבלן/ספק נוצרות שורות הוצאה חודשיות (חשבון חלקי בסוף כל חודש ביצוע). מועד התשלום מחושב לפי תנאי התשלום שבכרטיס הספק, וכל שורה ניתנת לעריכה אחר כך בלשונית ההוצאות.</p>
+      <p class="mut" style="margin-top:0">לכל קבלן/ספק נוצרות שורות הוצאה לפי אופן התשלום: חודשי שווה, תשלום בתחילה ובסוף, או אבני דרך (חשבון בסוף חודש הביצוע של כל תשלום). מועד התשלום מחושב לפי תנאי התשלום שבכרטיס הספק, וכל שורה ניתנת לעריכה אחר כך בלשונית ההוצאות.</p>
       <div class="fields">
         <div><label class="f">חודש ביצוע ראשון</label><input class="i" id="spFrom" type="month"></div>
         <div><label class="f">מספר חודשי ביצוע</label><input class="i num" id="sprN" type="number" min="1" max="36" value="4"></div>
         <div><label class="f">סכום לפריסה</label><select class="i" id="spBase"><option value="commit">התקשרות (אם הוזנה), אחרת תקציב</option><option value="budget">תקציב</option></select></div>
       </div>
       <label style="display:flex;gap:7px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="spRest" checked> לפרוס רק את היתרה שעדיין לא מופיעה בתזרים</label>
+      <div class="fields" style="margin-top:12px">
+        <div><label class="f">אופן תשלום</label><select class="i" id="spMode"><option value="auto">לפי כרטיס כל ספק</option><option value="m">חודשי שווה</option><option value="se">תשלום בתחילה ובסוף</option><option value="ms">אבני דרך</option></select></div>
+        <div id="wrapSpPct"><label class="f" id="lblSpPct">% בתשלום הראשון</label><input class="i num" id="spPct" type="number" step="0.1" min="0" max="100" placeholder="לפי ההסכם עם הספק"></div>
+      </div>
+      <div id="wrapSpMs" style="display:none;margin-top:10px">
+        <div class="tbl-scroll" style="border:1px solid var(--line);border-radius:10px"><table class="t" id="tSpMs"></table></div>
+        <button class="btn sm" id="spMsAdd" style="margin-top:6px">+ אבן דרך</button>
+      </div>
+      <label id="wrapSpSave" style="display:none;gap:7px;align-items:center;margin-top:10px;font-size:13px"><input type="checkbox" id="spSave" checked> לשמור את אופן התשלום בכרטיס הספק לפריסות הבאות</label>
       <div class="card" style="box-shadow:none;margin-top:14px">
         <div class="card-h" style="padding:10px 13px"><h3 style="font-size:13.5px">מקדמה לספק / קבלן</h3><span class="hint">פעם אחת לכל גורם. גורם שכבר יש לו מקדמה בתזרים לא יקבל מקדמה נוספת.</span><div class="spacer"></div><button class="btn sm danger" id="spAdvClear" style="display:none">✕ ביטול המקדמה</button></div>
         <div class="card-b" style="padding:13px">
@@ -2075,6 +2086,29 @@ function budEdit(id,f,v){
 }
 /* ---------- פריסת התקציב לתזרים ---------- */
 let spreadParty=null; // null = כולם
+let SPMS=[]; // אבני דרך בחלון הפריסה: {pct, off} – off = חודשים מחודש הביצוע הראשון
+const SP_LBL={m:'חודשי שווה',se:'תחילה וסוף',ms:'אבני דרך'};
+function monOff(from,m){if(!from||!m)return 0;const [a,b]=from.split('-').map(Number),[c,d]=m.split('-').map(Number);return (c-a)*12+(d-b);}
+function spVendor(g){return g.party?findParty('expense',g.party):null;}
+function spEffMode(p){return p&&p.spMode||(p&&(p.role==='יועץ / מתכנן'||/יועצ/.test(p.cat||''))?'se':'m');}
+// תשלומים לגורם: [{off, f, d}] או {err}
+function spPays(g,n){
+  const sel=$('#spMode').value, p=spVendor(g), mode=sel==='auto'?spEffMode(p):sel, inp=$('#spPct').value;
+  if(mode==='se'){
+    const own=p&&p.spPct!==''&&p.spPct!=null?Number(p.spPct):null;
+    const pct=spreadParty!==null?(inp===''?null:Number(inp)):(sel==='auto'&&own!=null?own:(inp===''?own:Number(inp)));
+    if(pct==null||!(pct>=0&&pct<=100)) return {mode,err:'חסר אחוז לתשלום הראשון'};
+    return {mode,pct,pays:[{off:0,f:pct/100,d:`תשלום ראשון (${pct}%)`},{off:n-1,f:1-pct/100,d:`תשלום אחרון (${r2(100-pct)}%)`}].filter(x=>x.f>0)};
+  }
+  if(mode==='ms'){
+    const L=spreadParty!==null?SPMS:(p&&p.spMs)||[];
+    if(!L.length) return {mode,err:'לא הוגדרו אבני דרך'};
+    const tot=L.reduce((a,x)=>a+(Number(x.pct)||0),0);
+    if(Math.abs(tot-100)>.01) return {mode,err:'סך אבני הדרך '+r2(tot)+'% ולא 100%'};
+    return {mode,pays:L.map((x,i)=>({off:Number(x.off)||0,f:(Number(x.pct)||0)/100,d:`אבן דרך ${i+1}/${L.length} (${Number(x.pct)}%)`})).filter(x=>x.f>0)};
+  }
+  return {mode:'m',pays:Array.from({length:n},(_,i)=>({off:i,f:1/n,d:'לפי תקציב '+(i+1)+'/'+n}))};
+}
 function hasAdvance(party){return S.expenses.some(r=>(r.party||'')===party&&r.kind==='מקדמה'&&r.status!=='בוטל');}
 function spreadPlan(){
   const base=$('#spBase').value, rest=$('#spRest').checked;
@@ -2087,7 +2121,7 @@ function spreadPlan(){
       else adv=r2(Math.min(mode==='pct'?target*val/100:val, off?amt:Infinity));
     }
     const spreadAmt=r2(off?amt-adv:amt);
-    return {g,amt,adv,advSkip,spreadAmt};
+    return Object.assign({g,amt,adv,advSkip,spreadAmt},spPays(g,Math.max(1,Math.min(36,Number($('#sprN').value)||1))));
   }).filter(x=>x.amt>0.5);
 }
 function openSpread(party){
@@ -2097,9 +2131,25 @@ function openSpread(party){
   // המקדמה לא נשמרת בין פתיחות: כל פריסה מתחילה "ללא מקדמה"
   $('#spAdvMode').value='none'; $('#spAdvVal').value=''; $('#spAdvOff').checked=true;
   $('#spAdvDate').value=$('#spFrom').value+'-01';
+  // אופן התשלום: לגורם בודד – מהכרטיס שלו; לכל הגורמים – לפי כרטיס כל ספק
+  const one=spreadParty!==null, p=one?spVendor({party:spreadParty}):null;
+  $('#spMode').querySelector('option[value="auto"]').hidden=one; $('#spMode').querySelector('option[value="ms"]').hidden=!one;
+  $('#spMode').value=one?spEffMode(p):'auto';
+  $('#spPct').value=one&&p&&p.spPct!==''&&p.spPct!=null?p.spPct:'';
+  SPMS=one&&p&&p.spMs?p.spMs.map(x=>({pct:x.pct,off:x.off})):[{pct:'',off:0},{pct:'',off:Math.max(0,(Number($('#sprN').value)||1)-1)}];
+  $('#wrapSpSave').style.display=one&&p?'flex':'none'; $('#spSave').checked=true;
   spreadPreview(); $('#ovSpread').classList.add('on');
 }
-function spreadPreview(){
+function spreadPreview(keepMs){
+  const sm=$('#spMode').value, one=spreadParty!==null;
+  $('#wrapSpPct').style.display=sm==='se'||(sm==='auto')?'':'none';
+  $('#lblSpPct').textContent=sm==='auto'?'% בתשלום הראשון (לספקים בתחילה וסוף שאין להם אחוז בכרטיס)':'% בתשלום הראשון';
+  $('#wrapSpMs').style.display=sm==='ms'&&one?'':'none';
+  if(sm==='ms'&&one&&keepMs!==true){const f=$('#spFrom').value;
+    $('#tSpMs').innerHTML='<thead><tr><th>#</th><th>אחוז (%)</th><th>חודש ביצוע</th><th></th></tr></thead><tbody>'+SPMS.map((x,i)=>`<tr><td class="mut">${i+1}</td>
+      <td><input class="ti num" data-ms="${i}" data-f="pct" type="number" step="0.1" value="${esc(x.pct)}" style="max-width:90px"></td>
+      <td><input class="ti" data-ms="${i}" data-f="m" type="month" value="${f?monthAdd(f,Number(x.off)||0):''}"></td>
+      <td><button class="btn sm ghost" data-msdel="${i}" title="מחיקה">✕</button></td></tr>`).join('')+'</tbody>';}
   const plan=spreadPlan(), n=Math.max(1,Number($('#sprN').value)||1);
   const mode=$('#spAdvMode').value;
   $('#wrapAdvVal').style.display=mode==='none'?'none':''; $('#wrapAdvDate').style.display=mode==='none'?'none':'';
@@ -2107,20 +2157,31 @@ function spreadPreview(){
   $('#lblAdvVal').textContent=mode==='pct'?'אחוז מהסכום (%)':'סכום המקדמה (₪)';
   const sp=plan.reduce((a,x)=>a+(x.spreadAmt>0.5?x.spreadAmt:0),0), adv=plan.reduce((a,x)=>a+x.adv,0);
   const nAdv=plan.filter(x=>x.adv>0).length, skip=plan.filter(x=>x.advSkip).map(x=>x.g.party||'ללא שיוך');
-  const rows=plan.filter(x=>x.spreadAmt>0.5).length*n+nAdv;
+  const ok=plan.filter(x=>!x.err), bad=plan.filter(x=>x.err);
+  const rows=ok.filter(x=>x.spreadAmt>0.5).reduce((a,x)=>a+x.pays.length,0)+nAdv;
+  const modes=[...new Set(ok.map(x=>x.mode))], byMode=m=>ok.filter(x=>x.mode===m).length;
+  const how=modes.length===1&&modes[0]==='m'?`מחולקים ל-${n} חודשים החל מ-${esc(fmtMonth($('#spFrom').value))}`
+    :modes.length===1&&modes[0]==='se'&&one?`בשני תשלומים: ${ok[0]?ok[0].pct:''}% ב-${esc(fmtMonth($('#spFrom').value))} והיתרה ב-${esc(fmtMonth(monthAdd($('#spFrom').value,n-1)))}`
+    :modes.length===1&&modes[0]==='ms'?`ב-${ok[0]?ok[0].pays.length:0} אבני דרך`
+    :modes.map(m=>`${SP_LBL[m]}: ${byMode(m)} גורמים`).join(' · ');
   $('#spInfo').innerHTML=plan.length?`ייווצרו <b>${rows}</b> שורות הוצאה ל-<b>${plan.length}</b> גורמים:
     ${nAdv?`<b>${nAdv}</b> מקדמות בסך <b>${money(adv)}</b>${$('#spAdvDate').value?' ב-'+esc(new Date($('#spAdvDate').value+'T12:00').toLocaleDateString('he-IL')):''}, ועוד `:''}
-    חשבונות חלקיים בסך <b>${money(sp)}</b> מחולקים ל-${n} חודשים החל מ-${esc(fmtMonth($('#spFrom').value))}.
+    חשבונות חלקיים בסך <b>${money(sp)}</b> ${how}.
+    ${bad.length?`<div style="margin-top:6px;color:var(--neg);font-size:12.5px">⚠ לא ייפרסו: ${bad.map(x=>esc((x.g.party||'ללא שיוך')+' – '+x.err)).join(' · ')}</div>`:''}
     ${skip.length?`<div class="mut" style="margin-top:4px;font-size:12px">כבר יש מקדמה בתזרים ל: ${esc(skip.join(', '))} – לא תיווצר מקדמה נוספת.</div>`:''}`
     :'אין יתרה לפריסה – הסכומים כבר מופיעים בתזרים.';
-  $('#spGo').disabled=!plan.length;
+  $('#spGo').disabled=!ok.length;
 }
 function doSpread(){
   const plan=spreadPlan(), n=Math.max(1,Math.min(36,Number($('#sprN').value)||1));
   const from=$('#spFrom').value; if(!from) return toast('בחרו חודש ביצוע ראשון');
   const [y0,m0]=from.split('-').map(Number); let cnt=0;
   const advDate=$('#spAdvDate').value||from+'-01';
-  plan.forEach(({g,adv,spreadAmt})=>{
+  const one=spreadParty!==null, sm=$('#spMode').value;
+  if(one&&$('#spSave').checked){const p=spVendor({party:spreadParty}); if(p&&sm!=='auto'){p.spMode=sm;
+    if(sm==='se'&&$('#spPct').value!=='')p.spPct=Number($('#spPct').value);
+    if(sm==='ms')p.spMs=SPMS.map(x=>({pct:Number(x.pct)||0,off:Number(x.off)||0})); p.updatedAt=Date.now();}}
+  plan.filter(x=>!x.err).forEach(({g,adv,spreadAmt,pays})=>{
     const label=[...g.trades].join(', ');
     if(g.party) ensureParty('expense',g.party,'','',g.cat);
     if(adv>0){
@@ -2129,15 +2190,15 @@ function doSpread(){
       cnt++;
     }
     const amt=spreadAmt; if(amt<=0.5) return;
-    const each=Math.floor(amt/n*100)/100;
-    for(let i=0;i<n;i++){
-      const end=new Date(y0,m0-1+i+1,0,12);
-      const a=i===n-1?r2(amt-each*(n-1)):each;
-      S.expenses.push({id:uid(),desc:label+' – לפי תקציב '+(i+1)+'/'+n,party:g.party,cat:g.cat,kind:'חשבון חלקי',amount:a,
+    let used=0;
+    pays.forEach((P,i)=>{
+      const end=new Date(y0,m0-1+P.off+1,0,12);
+      const a=i===pays.length-1?r2(amt-used):Math.floor(amt*P.f*100)/100; used=r2(used+a);
+      S.expenses.push({id:uid(),desc:label+' – '+P.d,party:g.party,cat:g.cat,kind:'חשבון חלקי',amount:a,
         date:end.getFullYear()+'-'+pad(end.getMonth()+1)+'-'+pad(end.getDate()),workMonth:end.getFullYear()+'-'+pad(end.getMonth()+1),
         basis:'',terms:'',actualAmount:'',actualDate:'',status:'צפוי',notes:'נוצר מפריסת התקציב',fromBudget:true});
       cnt++;
-    }
+    });
   });
   save();render();$('#ovSpread').classList.remove('on');
   toast(`נוצרו ${cnt} שורות הוצאה. מועדי התשלום מחושבים לפי תנאי התשלום בכרטיס כל ספק.`,5000);
@@ -2371,7 +2432,7 @@ function readRow(){
   return o;
 }
 /* ---------- ספקים / לקוחות: מאגר משותף בין פרויקטים (מילוי אוטומטי) ---------- */
-const DIR_F=['contact','phone','email','email2','bankName','bankBranch','bankAcct','role','terms','basis','cat','retention'];
+const DIR_F=['contact','phone','email','email2','bankName','bankBranch','bankAcct','role','terms','basis','cat','retention','spMode','spPct'];
 const BANKS=['04 – בנק יהב','09 – בנק הדואר','10 – בנק לאומי','11 – בנק דיסקונט','12 – בנק הפועלים','13 – בנק אגוד','14 – בנק אוצר החייל',
   '17 – בנק מרכנתיל דיסקונט','18 – וואן זירו','20 – בנק מזרחי טפחות','31 – הבנק הבינלאומי','46 – בנק מסד','52 – בנק פועלי אגודת ישראל','54 – בנק ירושלים'];
 function normName(s){
@@ -2461,8 +2522,10 @@ function openParty(type,id){
   $('#pSuggest').style.display='none';
   $('#pDrvNote').textContent=DRV.enabled?'· נשמרים גם ב-Google Drive':'· נשמרים בדפדפן (חברו את Drive כדי לשמור בענן)';
   renderPFiles(); vdFormFill(p);
+  $('#pSpMode').value=p&&p.spMode||''; $('#pSpPct').value=p&&p.spPct!=null?p.spPct:''; pSpUI();
   $('#ovParty').classList.add('on'); setTimeout(()=>$('#pName').focus(),40);
 }
+function pSpUI(){const r=$('#pRole').value, m=$('#pSpMode').value||(r==='יועץ / מתכנן'||/יועצ/.test($('#pCat').value||'')?'se':'m');$('#wrapPSpPct').style.display=pEditing&&pEditing.type==='vendor'&&m==='se'?'':'none';}
 function dirSuggest(exactOnly){
   if(!pEditing) return;
   const name=$('#pName').value.trim(), box=$('#pSuggest');
@@ -5181,7 +5244,7 @@ function bind(){
       cat:pEditing.type==='vendor'?$('#pCat').value:'',retention:Number($('#pRet').value)||0,notes:$('#pNotes').value.trim(),
       contact:$('#pContact').value.trim(),phone:$('#pPhone').value.trim(),email:$('#pEmail').value.trim(),
       contracts:pEditing.files.slice(),idx:idxFormRead('pIdx'),updatedAt:Date.now()};
-    if(pEditing.type==='vendor') Object.assign(o,vdFormRead());
+    if(pEditing.type==='vendor') Object.assign(o,vdFormRead(),{spMode:$('#pSpMode').value,spPct:$('#pSpPct').value===''?'':Number($('#pSpPct').value)});
     if(pEditing.type==='vendor') Object.assign(o,{email2:$('#pEmail2').value.trim(),bankName:$('#pBank').value.trim(),
       bankBranch:$('#pBranch').value.trim(),bankAcct:$('#pAcct').value.trim()});
     if(pEditing.filledFrom) o.filledFrom=pEditing.filledFrom;
@@ -5296,7 +5359,11 @@ function bind(){
     const x=e.target.closest('[data-bcx]'); if(x){const n=x.dataset.bcx; BC_OPEN.has(n)?BC_OPEN.delete(n):BC_OPEN.add(n); renderBudget();}});
   $('#bSpreadAll').onclick=()=>openSpread();
   $('#spAdvClear').onclick=()=>{$('#spAdvMode').value='none';$('#spAdvVal').value='';spreadPreview();};
-  ['#spFrom','#sprN','#spBase','#spRest','#spAdvMode','#spAdvVal','#spAdvDate','#spAdvOff'].forEach(x=>{$(x).addEventListener('change',spreadPreview);$(x).addEventListener('input',spreadPreview);});
+  $('#pSpMode').onchange=pSpUI; $('#pRole').addEventListener('change',pSpUI);
+  $('#spMsAdd').onclick=()=>{SPMS.push({pct:'',off:Math.max(0,(Number($('#sprN').value)||1)-1)});spreadPreview();};
+  $('#tSpMs').addEventListener('input',e=>{const i=e.target.dataset.ms;if(i==null)return;const r=SPMS[i];if(e.target.dataset.f==='pct')r.pct=e.target.value;else r.off=Math.max(0,monOff($('#spFrom').value,e.target.value));spreadPreview(true);});
+  $('#tSpMs').addEventListener('click',e=>{const b=e.target.closest('[data-msdel]');if(b){SPMS.splice(Number(b.dataset.msdel),1);spreadPreview();}});
+  ['#spFrom','#sprN','#spBase','#spRest','#spMode','#spPct','#spAdvMode','#spAdvVal','#spAdvDate','#spAdvOff'].forEach(x=>{$(x).addEventListener('change',spreadPreview);$(x).addEventListener('input',spreadPreview);});
   $('#spGo').onclick=doSpread;
   $('#btnSched').onclick=openSched;
   $('#scTplStd').onclick=()=>schedTpl('std'); $('#scTplEq').onclick=()=>schedTpl('eq');
