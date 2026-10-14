@@ -1568,6 +1568,7 @@ function lvToolbar(type){
     <datalist id="dlLv${sfx}"></datalist>
     <button class="btn sm pri" data-lvmove>העברה</button>
     <button class="btn sm" data-lvclear>ביטול סימון</button>
+    <button class="btn sm danger" data-lvdel>🗑 מחיקת המסומנות</button>
     <span class="mut" style="font-size:11.5px">לאיחוד קבוצות: סמנו את הקבוצות בכותרת שלהן והעבירו לשם אחד. להפרדה: סמנו שורות והעבירו לשם חדש.</span>
   </div>`;
   const fld=LV_FIELD[v.group]||(isIn?'party':'cat');
@@ -1580,6 +1581,9 @@ function renderRows(type){
   const q=(($(isIn?'#qIn':'#qOut').value)||'').trim();
   const fc=isIn?'':($('#fCat').value||'');
   let rows=rowsOf(type).slice();
+  // סינון שנשמר מפרויקט אחר (ספק שלא קיים כאן) – מתאפס, אחרת הרשימה נראית ריקה
+  if(v.fParty&&!rows.some(r=>(r.party||'')===v.fParty)){v.fParty='';lvSave();}
+  if(v.fStatus&&v.fStatus[0]!=='@'&&!STATUS.includes(v.fStatus)){v.fStatus='';lvSave();}
   if(q) rows=rows.filter(r=>[r.desc,r.party,r.cat,r.kind,r.notes].some(x=>String(x||'').includes(q)));
   if(fc) rows=rows.filter(r=>(r.cat||'')===fc);
   if(v.fParty) rows=rows.filter(r=>(r.party||'')===v.fParty);
@@ -1686,6 +1690,10 @@ function bindListViews(){
       if(e.target.closest('[data-lvdir]')){v.dir*=-1;lvSave();renderRows(type);}
       if(e.target.closest('[data-lvmove]')) lvMove(type);
       if(e.target.closest('[data-lvclear]')){LVSEL[type].clear();renderRows(type);}
+      if(e.target.closest('[data-lvdel]')){const ids=LVSEL[type],arr=rowsOf(type),n=arr.filter(r=>ids.has(r.id)).length;
+        if(n&&confirm('למחוק '+n+' שורות '+(type==='income'?'הכנסה':'הוצאה')+' מסומנות? לא ניתן לבטל.')){
+          for(let i=arr.length-1;i>=0;i--) if(ids.has(arr[i].id)) arr.splice(i,1);
+          ids.clear();save();render();toast('נמחקו '+n+' שורות');}}
       const c=e.target.closest('[data-lvcol]');
       if(c){const ks=[...new Set(rowsOf(type).map(r=>lvKey(r,type,v.group)))];
         if(LVCOL[type].size) LVCOL[type].clear(); else ks.forEach(k=>LVCOL[type].add(k)); renderRows(type);}
@@ -1848,7 +1856,8 @@ function classifyTrade(desc,num,ctx){
 }
 function chNum(s){const m=String(s==null?'':s).match(/פרק\s*(\d{1,3})/)||String(s==null?'':s).match(/^\s*(\d{1,3})\s*$/);return m?m[1].padStart(2,'0'):'';}
 function budRecords(){
-  const m=IMP.map, out=[]; let ch={num:'',text:''}, sub='';
+  const m=IMP.map, out=[]; let ch={num:'',text:''}, sub='', skip=false;
+  const hdrDesc=m.desc==null?'':String((IMP.rows[Number($('#mHeadRow').value)]||[])[m.desc]||'').trim();
   impDataRows().forEach(cells=>{
     const g=k=>m[k]==null?'':String(cells[m[k]]==null?'':cells[m[k]]).trim();
     const desc=g('desc'), chCell=g('chapter');
@@ -1858,16 +1867,20 @@ function budRecords(){
     const isSum=/סה"כ|סה״כ|סך הכל|סיכום|^total/i.test(desc);
     if(total==null){ // שורת פרק / כותרת משנה
       if(isSum) return;
-      const text=desc||chCell; if(!text||isNumLike(text)) return;
+      const text=desc||chCell; if(!text||isNumLike(text)||(hdrDesc&&text===hdrDesc)) return; // שורת כותרות חוזרת
       const n=chNum(chCell)||chNum(desc);
-      if(n){ch={num:n,text:desc||chCell};sub='';} else sub=text;
+      if(n){ch={num:n,text:desc||chCell};sub='';skip=false;}
+      else if(/אינ[ןם]\s*כלול|לא\s*כלול|חלופות|אופציות|ריכוז\s*תקציב/.test(text)) skip=true; // חלופות וריכוז – לא חלק מהתקציב
+      else if(/^(תקורות|מוקדמות|הוצאות כלליות)/.test(text)){ch={num:'',text};sub='';skip=false;}
+      else sub=text;
       return;
     }
-    if(!desc||isSum) return;
+    if(!desc||isSum||skip) return;
     let num=chNum(chCell)||ch.num;
     if(!num){const cm=g('code').match(/^(\d{1,3})[.\-\/]/);if(cm)num=cm[1].padStart(2,'0');}
     const fileTrade=g('trade');
-    const trade=fileTrade||classifyTrade(desc,num,(sub+' '+ch.text).trim());
+    let trade=fileTrade||classifyTrade(desc,num,(sub+' '+ch.text).trim());
+    if(trade===UNCL&&!fileTrade&&/^(תקורות|מוקדמות|הוצאות כלליות)/.test(ch.text)&&TRADES.some(t=>t.k==='מוקדמות והוצאות כלליות')) trade='מוקדמות והוצאות כלליות';
     const T=tradeOf(trade), fileParty=g('party');
     const sell=parseNum(g('sell'));
     out.push({desc,code:g('code'),unit:g('unit'),qty:qty==null?'':qty,price:price==null?'':price,total:r2(total),
@@ -2935,7 +2948,7 @@ const BHINTS={
   code:["מס' סעיף",'מס׳ סעיף','סעיף','קוד','code','מק"ט'],
   unit:["יח'",'יח׳','יחידת מידה','unit'],
   qty:['כמות','qty','quantity'],
-  price:['מחיר יחידה','מחיר','price','unit price'],
+  price:["עלות יח'",'עלות יח׳','עלות ליח','מחיר ליח','מחיר יחידה','מחיר','price','unit price'],
   total:['סה"כ','סה״כ','total','סכום','עלות','amount'],
   sell:['סה"כ (מועמס','סה״כ (מועמס','מועמס','ללקוח','מכירה','sell'],
   trade:['מלאכה','תחום','trade'],
@@ -3144,6 +3157,21 @@ async function readXlsx(file){
   });
   return sheets;
 }
+// קובץ שנראה כמו תקציב / כתב כמויות: כותרות כמות + יחידה + סה"כ, ופרקים או מספרי סעיפים (06.001)
+function looksLikeBudget(rows){
+  const T=c=>String(c==null?'':c).trim();
+  const head=rows.slice(0,15).some(r=>{const t=r.map(T).join('|');return /כמות/.test(t)&&/יח['׳]|יחידה/.test(t)&&/סה["״]כ|עלות|מחיר/.test(t);});
+  if(!head) return false;
+  let ch=0,code=0; rows.forEach(r=>{const a=T(r[0]),b=T(r[1]);
+    if(/^פרק\s*\d/.test(a)||/^פרק\s*\d/.test(b)) ch++;
+    if(/^\d{1,3}\.\d{2,4}$/.test(a)) code++;});
+  return ch>=2||code>=5;
+}
+function budgetGuard(rows){
+  if(impMode!=='cash'||!looksLikeBudget(rows)) return;
+  if(confirm('הקובץ נראה כמו תקציב / כתב כמויות (פרקים, כמויות ומחירים).\nלקלוט אותו לתקציב הפרויקט (לשונית «תקציב ובקרה»)?\n\nביטול = ייבוא כשורות הוצאה בתזרים'))
+    impMode='budget';
+}
 async function handleCsv(file){
   if(/\.(xlsx|xlsm|xls)$/i.test(file.name)){
     try{
@@ -3153,6 +3181,7 @@ async function handleCsv(file){
       if(!names.length) return toast('לא נמצאו נתונים בקובץ');
       const best=names.slice().sort((a,b)=>sheets[b].length-sheets[a].length)[0];
       const ctx={sheets,current:best,file:file.name};
+      budgetGuard(sheets[best]);
       openMap(sheets[best],'Excel · '+file.name+' · '+best,
         `<div class="info">הקובץ נקרא בהצלחה: גיליון «${esc(best)}», ${sheets[best].length} שורות${names.length>1?` (בקובץ ${names.length} גיליונות – ניתן להחליף למעלה)`:''}. בדקו את המיפוי והתצוגה המקדימה לפני הייבוא.</div>`,ctx);
     }catch(e){prog(false);toast('שגיאה בקריאת קובץ Excel: '+e.message,5000);}
@@ -3164,6 +3193,7 @@ async function handleCsv(file){
   const sep=sniffSep(txt);
   const rows=parseDelimited(txt,sep);
   if(!rows.length){toast('לא נמצאו נתונים בקובץ');return;}
+  budgetGuard(rows);
   openMap(rows,'CSV · '+file.name,`<div class="info">הקובץ נקרא בהצלחה: ${rows.length} שורות, מפריד «${sep==='\t'?'TAB':sep}». בדקו את המיפוי והתצוגה המקדימה לפני הייבוא.</div>`);
 }
 async function handlePdf(file){
