@@ -2092,7 +2092,7 @@ function monOff(from,m){if(!from||!m)return 0;const [a,b]=from.split('-').map(Nu
 function spVendor(g){return g.party?findParty('expense',g.party):null;}
 function spEffMode(p){return p&&p.spMode||(p&&(p.role==='יועץ / מתכנן'||/יועצ/.test(p.cat||''))?'se':'m');}
 // תשלומים לגורם: [{off, f, d}] או {err}
-function spPays(g,n){
+function spPays(g,n,advPct){
   const sel=$('#spMode').value, p=spVendor(g), mode=sel==='auto'?spEffMode(p):sel, inp=$('#spPct').value;
   if(mode==='se'){
     const own=p&&p.spPct!==''&&p.spPct!=null?Number(p.spPct):null;
@@ -2104,8 +2104,10 @@ function spPays(g,n){
     const L=spreadParty!==null?SPMS:(p&&p.spMs)||[];
     if(!L.length) return {mode,err:'לא הוגדרו אבני דרך'};
     const tot=L.reduce((a,x)=>a+(Number(x.pct)||0),0);
-    if(Math.abs(tot-100)>.01) return {mode,err:'סך אבני הדרך '+r2(tot)+'% ולא 100%'};
-    return {mode,pays:L.map((x,i)=>({off:Number(x.off)||0,f:(Number(x.pct)||0)/100,d:`אבן דרך ${i+1}/${L.length} (${Number(x.pct)}%)`})).filter(x=>x.f>0)};
+    // מקדמה + אבני דרך = 100%: המקדמה חלק מהסכום ואבני הדרך מחלקות את היתרה
+    const withAdv=advPct>0&&Math.abs(tot+advPct-100)<=.05;
+    if(Math.abs(tot-100)>.01&&!withAdv) return {mode,err:'סך אבני הדרך '+r2(tot)+'%'+(advPct>0?' ועם המקדמה '+r2(tot+advPct)+'%':'')+' ולא 100%'};
+    return {mode,absorb:withAdv,pays:L.map((x,i)=>({off:Number(x.off)||0,f:(Number(x.pct)||0)/tot,d:`אבן דרך ${i+1}/${L.length} (${Number(x.pct)}%)`})).filter(x=>x.f>0)};
   }
   return {mode:'m',pays:Array.from({length:n},(_,i)=>({off:i,f:1/n,d:'לפי תקציב '+(i+1)+'/'+n}))};
 }
@@ -2120,8 +2122,9 @@ function spreadPlan(){
       if(hasAdvance(g.party)) advSkip=true;
       else adv=r2(Math.min(mode==='pct'?target*val/100:val, off?amt:Infinity));
     }
-    const spreadAmt=r2(off?amt-adv:amt);
-    return Object.assign({g,amt,adv,advSkip,spreadAmt},spPays(g,Math.max(1,Math.min(36,Number($('#sprN').value)||1))));
+    const P=spPays(g,Math.max(1,Math.min(36,Number($('#sprN').value)||1)),adv>0&&amt>0?adv/(target||amt)*100:0);
+    const spreadAmt=r2(off||P.absorb?amt-adv:amt);
+    return Object.assign({g,amt,adv,advSkip,spreadAmt},P);
   }).filter(x=>x.amt>0.5);
 }
 function openSpread(party){
@@ -2181,12 +2184,12 @@ function doSpread(){
   if(one&&$('#spSave').checked){const p=spVendor({party:spreadParty}); if(p&&sm!=='auto'){p.spMode=sm;
     if(sm==='se'&&$('#spPct').value!=='')p.spPct=Number($('#spPct').value);
     if(sm==='ms')p.spMs=SPMS.map(x=>({pct:Number(x.pct)||0,off:Number(x.off)||0})); p.updatedAt=Date.now();}}
-  plan.filter(x=>!x.err).forEach(({g,adv,spreadAmt,pays})=>{
+  plan.filter(x=>!x.err).forEach(({g,adv,spreadAmt,pays,absorb})=>{
     const label=[...g.trades].join(', ');
     if(g.party) ensureParty('expense',g.party,'','',g.cat);
     if(adv>0){
       S.expenses.push({id:uid(),desc:'מקדמה – '+label,party:g.party,cat:g.cat,kind:'מקדמה',amount:adv,date:advDate,workMonth:'',
-        basis:'inv',terms:0,actualAmount:'',actualDate:'',status:'צפוי',notes:'מקדמה מפריסת התקציב'+($('#spAdvOff').checked?' (מקוזזת מהחשבונות)':' (בנוסף לחשבונות)'),fromBudget:true});
+        basis:'inv',terms:0,actualAmount:'',actualDate:'',status:'צפוי',notes:'מקדמה מפריסת התקציב'+($('#spAdvOff').checked||absorb?' (מקוזזת מהחשבונות)':' (בנוסף לחשבונות)'),fromBudget:true});
       cnt++;
     }
     const amt=spreadAmt; if(amt<=0.5) return;
