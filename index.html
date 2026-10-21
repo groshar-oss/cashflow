@@ -770,6 +770,8 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
         <div><label class="f" id="pEmailL">אימייל ראשי</label><input class="i num" id="pEmail" type="email" dir="ltr"></div>
         <div data-vo><label class="f">אימייל משני (אופציונלי)</label><input class="i num" id="pEmail2" type="email" dir="ltr"></div>
         <div><label class="f">סוג התקשרות</label><select class="i" id="pRole"></select></div>
+        <div><label class="f">שם החברה הרשמי (חשבונית והעברה)</label><input class="i" id="pCompany" placeholder="למשל: א.ב. חשמל בע״מ"></div>
+        <div><label class="f">ח.פ. / ע.מ.</label><input class="i num" id="pCoId" inputmode="numeric" dir="ltr"></div>
       </div>
       <div id="pSuggest" class="sugg" style="display:none"></div>
       <div class="sec-t">📇 ספר טלפונים</div>
@@ -1794,7 +1796,7 @@ function renderParties(){
   if(!S.vendors.length) tv.innerHTML=`<tbody><tr><td><div class="empty">אין ספקים רשומים</div></td></tr></tbody>`;
   else tv.innerHTML=`<thead><tr><th>ספק / קבלן</th><th>טלפון</th><th>אימייל</th><th>חשבון בנק</th><th>תנאי תשלום</th><th>סעיף</th><th>חוזים</th><th>שורות</th><th>סה״כ</th><th></th></tr></thead><tbody>`+
     (LV.length?venGrouped(LV,VG,p=>{
-      const bank=(p.bankName||p.bankBranch||p.bankAcct)?`<div class="bank">${esc(p.bankName||'—')}<br><span class="mut">סניף</span> <b dir="ltr">${esc(p.bankBranch||'—')}</b> · <span class="mut">חשבון</span> <b dir="ltr">${esc(p.bankAcct||'—')}</b>
+      const bank=(p.bankName||p.bankBranch||p.bankAcct)?`<div class="bank">${p.company?'<b>'+esc(p.company)+'</b>'+(p.coId?' <span class="mut" dir="ltr">'+esc(p.coId)+'</span>':'')+'<br>':(p.bankAcct?'<span style="color:var(--neg);font-size:11.5px">⚠ חסר שם חברה</span><br>':'')}${esc(p.bankName||'—')}<br><span class="mut">סניף</span> <b dir="ltr">${esc(p.bankBranch||'—')}</b> · <span class="mut">חשבון</span> <b dir="ltr">${esc(p.bankAcct||'—')}</b>
         <button class="btn ghost sm" data-bcopy="${p.id}" title="העתקת פרטי הבנק" style="padding:1px 5px">📋</button></div>`:'<span class="mut">—</span>';
       const cs=(p.contracts||[]);
       const cc=cs.length?cs.map(c=>`<button class="chip b" data-fview="${c.id}" data-pid="${p.id}" title="${esc(c.name)}" style="border:0;cursor:pointer;max-width:150px;overflow:hidden;text-overflow:ellipsis">📄 ${esc(c.name)}${c.driveId?' ☁️':''}</button>`).join(' '):'<span class="mut">—</span>';
@@ -2476,7 +2478,7 @@ function readRow(){
   return o;
 }
 /* ---------- ספקים / לקוחות: מאגר משותף בין פרויקטים (מילוי אוטומטי) ---------- */
-const DIR_F=['contact','phone','email','email2','bankName','bankBranch','bankAcct','role','terms','basis','cat','retention','spMode','spPct'];
+const DIR_F=['company','coId','contact','phone','email','email2','bankName','bankBranch','bankAcct','role','terms','basis','cat','retention','spMode','spPct'];
 const BANKS=['04 – בנק יהב','09 – בנק הדואר','10 – בנק לאומי','11 – בנק דיסקונט','12 – בנק הפועלים','13 – בנק אגוד','14 – בנק אוצר החייל',
   '17 – בנק מרכנתיל דיסקונט','18 – וואן זירו','20 – בנק מזרחי טפחות','31 – הבנק הבינלאומי','46 – בנק מסד','52 – בנק פועלי אגודת ישראל','54 – בנק ירושלים'];
 function normName(s){
@@ -2531,12 +2533,12 @@ function removeParty(type,id){
 }
 function copyBank(id){
   const p=S.vendors.find(x=>x.id===id); if(!p) return;
-  const t=`${p.name}\nבנק: ${p.bankName||''}\nסניף: ${p.bankBranch||''}\nמספר חשבון: ${p.bankAcct||''}`;
+  const t=`${p.company||p.name}${p.coId?' · ח.פ. '+p.coId:''}\nבנק: ${p.bankName||''}\nסניף: ${p.bankBranch||''}\nמספר חשבון: ${p.bankAcct||''}`;
   (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('פרטי הבנק הועתקו'),()=>prompt('העתיקו את פרטי הבנק:',t.replace(/\n/g,' | ')));
 }
 
 /* ---------- party modal ---------- */
-const PF=[['contact','#pContact'],['phone','#pPhone'],['email','#pEmail'],['email2','#pEmail2'],['bankName','#pBank'],['bankBranch','#pBranch'],['bankAcct','#pAcct']];
+const PF=[['company','#pCompany'],['coId','#pCoId'],['contact','#pContact'],['phone','#pPhone'],['email','#pEmail'],['email2','#pEmail2'],['bankName','#pBank'],['bankBranch','#pBranch'],['bankAcct','#pAcct']];
 function openParty(type,id){
   const list=type==='client'?S.clients:S.vendors;
   const p=id?list.find(x=>x.id===id):null;
@@ -4608,8 +4610,12 @@ function bkToProject(id){
 /* ---------- בכרטיס ספק / לקוח: חיפוש ומילוי מספר הטלפונים ---------- */
 function bkFill(c,all){
   const set=(sel,v,force)=>{if(v&&(force||!$(sel).value.trim()))$(sel).value=v;};
-  set('#pName',c.co||c.name,all); set('#pContact',c.co?c.name:'',true); set('#pPhone',c.phone,true);
-  if(c.email){ if(!$('#pEmail').value.trim()||$('#pEmail').value.trim()===c.email) $('#pEmail').value=c.email; else if(pEditing.type==='vendor'&&!$('#pEmail2').value.trim()) $('#pEmail2').value=c.email; }
+  // בחירת איש קשר אחר מחליפה את פרטי איש הקשר הקודם (טלפון ומייל), כדי שלא יישאר טלפון של אדם אחר
+  const other=normName($('#pContact').value)&&normName($('#pContact').value)!==normName(c.name);
+  set('#pName',c.co||c.name,all); if(c.name) $('#pContact').value=c.name;
+  if(c.co) $('#pCompany').value=c.co;
+  if(c.phone||other) $('#pPhone').value=c.phone||'';
+  if(c.email||other) $('#pEmail').value=c.email||'';
   const r=bkRole(c.type,c.role); if(r&&pEditing.type==='vendor'&&[...$('#pRole').options].some(o=>o.value===r)){$('#pRole').value=r; if(typeof pSpUI==='function')pSpUI();}
   $('#pBkQ').value=''; $('#pBkRes').innerHTML=''; pBkRelated();
   toast('הפרטים מולאו מספר הטלפונים');
@@ -4625,8 +4631,8 @@ function pBkSearch(){
 // אנשי קשר נוספים של אותה חברה
 function pBkRelated(){
   const box=$('#pBkRel'); if(!box) return;
-  const n=normName($('#pName').value); if(!n){box.innerHTML='';return;}
-  const L=bookDB().filter(c=>c.co&&normName(c.co)===n);
+  const ns=[$('#pCompany').value,$('#pName').value].map(normName).filter(Boolean); if(!ns.length){box.innerHTML='';return;}
+  const L=bookDB().filter(c=>c.co&&ns.includes(normName(c.co)));
   box.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><b style="font-size:13px">אנשי קשר בחברה (${L.length})</b>
     <button type="button" class="btn sm" id="pBkAddRel">+ איש קשר לחברה</button></div>`+
     (L.length?`<div class="tbl-scroll" style="margin-top:6px;border:1px solid var(--line);border-radius:10px"><table class="t"><tbody>${L.map(c=>`<tr><td><b>${esc(c.name||'—')}</b></td><td class="mut">${esc(c.role||'')}</td>
@@ -4636,7 +4642,7 @@ function pBkRelated(){
 // בשמירת כרטיס: איש קשר חדש נכנס לספר הטלפונים
 function bkFromParty(o,type){
   if(!(o.contact||o.phone||o.email)) return false;
-  const c={co:o.name,name:o.contact||'',role:'',phone:o.phone||'',email:o.email||'',trades:type==='vendor'?(o.cat||''):'',
+  const c={co:o.company||o.name,name:o.contact||'',role:'',phone:o.phone||'',email:o.email||'',trades:type==='vendor'?(o.cat||''):'',
     type:type==='client'?'יזם / לקוח':o.role==='יועץ / מתכנן'?'יועץ':o.role==='רשויות ואגרות'?'רשות / תשתיות':'ספק / קבלן',notes:'נוסף מכרטיס '+(type==='client'?'לקוח':'ספק')};
   const n=normName(c.co), d=bkDigits(c.phone);
   if(bookDB().some(x=>normName(x.co)===n&&((c.name&&normName(x.name)===normName(c.name))||(d&&bkDigits(x.phone)===d)||(c.email&&x.email===c.email)))) return false;
@@ -4654,10 +4660,10 @@ function bindBook(){
     if(e.target.closest('[data-bkmore]')){BK_LIM+=300;renderBook();}
     if(del){const i=bookDB().findIndex(x=>x.id===del.dataset.bkdel);if(i>=0&&confirm('למחוק את «'+(bookDB()[i].name||bookDB()[i].co)+'» מספר הטלפונים?')){bookDB().splice(i,1);persist();renderBook();}}
   });
-  $('#pBkQ').oninput=pBkSearch; $('#pName').addEventListener('change',pBkRelated);
+  $('#pBkQ').oninput=pBkSearch; $('#pName').addEventListener('change',pBkRelated); $('#pCompany').addEventListener('change',pBkRelated);
   $('#ovParty').addEventListener('click',e=>{
     const pk=e.target.closest('[data-bkpick]'); if(pk){const c=bookDB().find(x=>x.id===pk.dataset.bkpick); if(c) bkFill(c,!$('#pName').value.trim());}
-    if(e.target.closest('#pBkAddRel')) openBk(null,{co:$('#pName').value.trim(),type:pEditing&&pEditing.type==='client'?'יזם / לקוח':'ספק / קבלן'});
+    if(e.target.closest('#pBkAddRel')) openBk(null,{co:$('#pCompany').value.trim()||$('#pName').value.trim(),type:pEditing&&pEditing.type==='client'?'יזם / לקוח':'ספק / קבלן'});
   });
 }
 /* ---------- export ---------- */
@@ -5022,6 +5028,7 @@ function partyInfo(type,name){
   if(p.contact) bits.push('👤 '+esc(p.contact));
   if(p.phone) bits.push('<span dir="ltr">'+esc(p.phone)+'</span>');
   if(p.email) bits.push('<span dir="ltr">'+esc(p.email)+'</span>');
+  if(p.company) bits.push('🏢 '+esc(p.company)+(p.coId?' · ח.פ. <span dir="ltr">'+esc(p.coId)+'</span>':''));
   if(type==='expense'&&(p.bankName||p.bankAcct)) bits.push('🏦 '+esc(p.bankName||'')+' · סניף <b dir="ltr">'+esc(p.bankBranch||'—')+'</b> · חשבון <b dir="ltr">'+esc(p.bankAcct||'—')+'</b>');
   return bits.join(' &nbsp;·&nbsp; ');
 }
@@ -5459,7 +5466,7 @@ function bind(){
     const list=pEditing.type==='client'?S.clients:S.vendors;
     const o={name,role:$('#pRole').value,basis:$('#pBasis').value,terms:Number($('#pTerms').value)||0,
       cat:pEditing.type==='vendor'?$('#pCat').value:'',retention:Number($('#pRet').value)||0,notes:$('#pNotes').value.trim(),
-      contact:$('#pContact').value.trim(),phone:$('#pPhone').value.trim(),email:$('#pEmail').value.trim(),
+      company:$('#pCompany').value.trim(),coId:$('#pCoId').value.trim(),contact:$('#pContact').value.trim(),phone:$('#pPhone').value.trim(),email:$('#pEmail').value.trim(),
       contracts:pEditing.files.slice(),idx:idxFormRead('pIdx'),updatedAt:Date.now()};
     if(pEditing.type==='vendor') Object.assign(o,vdFormRead(),{spMode:$('#pSpMode').value,spPct:$('#pSpPct').value===''?'':Number($('#pSpPct').value)});
     if(pEditing.type==='vendor') Object.assign(o,{email2:$('#pEmail2').value.trim(),bankName:$('#pBank').value.trim(),
