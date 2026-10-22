@@ -199,6 +199,8 @@ tr.grp.alrow td{background:inherit!important;color:inherit}
 tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .bcx{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:start}
 .bcx:hover b{text-decoration:underline}
+.bcfc{cursor:pointer}
+.bcfc:hover{outline:1px dashed var(--line,#94a3b8);outline-offset:-3px}
 tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
 .bcdet table.t th,.bcdet table.t td{padding:5px 8px;font-size:12.5px}
 </style>
@@ -758,6 +760,30 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
   </div>
 </div>
 
+<!-- ============ צפי עלות / התקשרות ============ -->
+<div class="ov" id="ovFc">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-h"><h3 id="fcTitle">עדכון עלות</h3><div class="spacer"></div><button class="x" data-close>✕</button></div>
+    <div class="modal-b">
+      <div class="info" id="fcInfo" style="margin-top:0"></div>
+      <div class="fields">
+        <div><label class="f">התקשרות – חוזה / הזמנה (₪)</label><input class="i num" id="fcCommit" inputmode="decimal" placeholder="—"></div>
+        <div><label class="f">צפי עלות (₪)</label><input class="i num" id="fcAmt" inputmode="decimal" placeholder="—"></div>
+        <div><label class="f">בסיס הצפי</label><select class="i" id="fcBasis"><option value="">—</option><option>הצעת מחיר</option><option>הערכה</option><option>מחיר שוק</option></select></div>
+        <div style="grid-column:1/-1"><label class="f">הערה</label><input class="i" id="fcNote" placeholder="למשל: הצעה מ-12/10, כולל פירוק"></div>
+      </div>
+      <p class="mut" style="font-size:12px;margin:8px 0 0">הסכום הקובע ליתרת התקציב, להתראות ולפריסה: התקשרות אם הוזנה, אחרת צפי עלות, אחרת התקציב.</p>
+      <div id="fcOver" style="display:none;margin-top:12px;padding:10px 12px;border-radius:10px;background:#fee2e2;color:#7f1d1d">
+        <div id="fcOverTxt" style="font-weight:600;margin-bottom:6px"></div>
+        <label style="display:block;margin:4px 0"><input type="radio" name="fcAct" value="keep" checked> להשאיר כחריגה מהתקציב (התקציב לא משתנה)</label>
+        <label style="display:block;margin:4px 0"><input type="radio" name="fcAct" value="fix"> תיקון תקציב: לעדכן את התקציב לסכום הנכון והחריגה תיעלם</label>
+        <div id="fcWhyW" style="display:none;margin-top:6px"><label class="f">סיבת התיקון (נרשמת ביומן השינויים) *</label><input class="i" id="fcWhy" placeholder="למשל: הסעיף תומחר לא נכון במערכת התמחור"></div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="btn pri" id="fcSave">שמירה</button><button class="btn" data-close>ביטול</button></div>
+  </div>
+</div>
+
 <!-- ============ PARTY MODAL ============ -->
 <div class="ov" id="ovParty">
   <div class="modal" style="max-width:720px">
@@ -1063,7 +1089,7 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
       <div class="fields">
         <div><label class="f">חודש ביצוע ראשון</label><input class="i" id="spFrom" type="month"></div>
         <div><label class="f">מספר חודשי ביצוע</label><input class="i num" id="sprN" type="number" min="1" max="36" value="4"></div>
-        <div><label class="f">סכום לפריסה</label><select class="i" id="spBase"><option value="commit">התקשרות (אם הוזנה), אחרת תקציב</option><option value="budget">תקציב</option></select></div>
+        <div><label class="f">סכום לפריסה</label><select class="i" id="spBase"><option value="commit">התקשרות, אחרת צפי עלות, אחרת תקציב</option><option value="budget">תקציב</option></select></div>
       </div>
       <label style="display:flex;gap:7px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="spRest" checked> לפרוס רק את היתרה שעדיין לא מופיעה בתזרים</label>
       <div class="fields" style="margin-top:12px">
@@ -1275,7 +1301,7 @@ function nextBucket(k){
 /* ---------- state ---------- */
 function blank(){
   return {v:2,settings:{projectName:'',openingBalance:0,contractTotal:0,from:'',to:'',vat:18,vatMode:'net',alert:0,critPct:15,ptype:'',idxRate:3,cats:DEF_CATS.slice()},
-          clients:[],vendors:[],incomes:[],expenses:[],budget:[],budgetCommit:{},ec:[],fixed:[],guar:[],dev:null};
+          clients:[],vendors:[],incomes:[],expenses:[],budget:[],budgetCommit:{},budgetFc:{},ec:[],fixed:[],guar:[],dev:null};
 }
 /* ---------- ריבוי פרויקטים ----------
    DB = {v:3, current:id, view:''|'all', projects:[{id,data:<state>}]}
@@ -1288,6 +1314,7 @@ function normalize(o){
   if(!Array.isArray(o.settings.cats)||!o.settings.cats.length) o.settings.cats=DEF_CATS.slice();
   ['clients','vendors','incomes','expenses','budget','ec','fixed','guar'].forEach(k=>{if(!Array.isArray(o[k]))o[k]=[];});
   if(!o.budgetCommit||typeof o.budgetCommit!=='object'||Array.isArray(o.budgetCommit)) o.budgetCommit={};
+  if(!o.budgetFc||typeof o.budgetFc!=='object'||Array.isArray(o.budgetFc)) o.budgetFc={};
   if(oldV<2){o.incomes.concat(o.expenses).forEach(r=>{if(r.terms===''||r.terms==null)r.basis='';});}
   o.clients.concat(o.vendors).forEach(p=>{if(!Array.isArray(p.contracts))p.contracts=[];});
   o.v=2; return o;
@@ -1980,6 +2007,9 @@ function budParties(){
     g.forecast=ex.reduce((a,r)=>a+(Number(r.amount)||0),0);
     g.actual=ex.reduce((a,r)=>a+(Number(r.actualAmount)||0),0);
     g.commit=Number(S.budgetCommit[g.party])||0;
+    const fc=(S.budgetFc||{})[g.party]; g.fc=fc&&Number(fc.amt)||0; g.fcBasis=fc&&fc.basis||''; g.fcNote=fc&&fc.note||'';
+    g.known=g.commit||g.fc; // התקשרות, אחרת צפי עלות
+    g.ref=Math.max(g.known,g.forecast); // הסכום הקובע ליתרה ולחריגה
     g.cat=Object.entries(g.cats).sort((a,b)=>b[1]-a[1])[0]?.[0]||'הוצאות כלליות';
   });
   return [...map.values()].sort((a,b)=>b.budget-a.budget);
@@ -1998,9 +2028,9 @@ function bcDetail(g,A){
   const vo=ex.filter(isVO), un=ex.filter(r=>!trOf(r)&&!isVO(r));
   G.forEach(x=>{x.L=x.L.filter(r=>!isVO(r));x.f=sum(x.L,'amount');x.p=sum(x.L,'actualAmount');x.d=x.b-x.f;x.over=x.f>x.b+0.5;}); G.sort((x,y)=>(y.over-x.over)||(x.d-y.d));
   const rs=A?`<div style="margin-bottom:8px">${A.reasons.map(r=>`<div>⚠ ${esc(r.label)}: ${money(r.from)} ← ${money(r.to)}${r.pct!=null?` <b>(+${fmtPct(r.pct)})</b>`:''}</div>`).join('')}</div>`:'';
-  const ref=Math.max(g.commit,g.forecast), anyOver=G.some(x=>x.over)||vo.length>0;
+  const ref=g.ref, anyOver=G.some(x=>x.over)||vo.length>0;
   const note=un.length&&!anyOver?`<div class="info" style="margin-bottom:8px">ל«${esc(g.party)}» כמה מלאכות, ו-${un.length} שורות בתזרים (${money(sum(un,'amount'))}) עוד לא שויכו למלאכה. שייכו כל שורה למלאכה שלה (בבחירה למטה) ויוצג בדיוק איפה החריגה.</div>`
-    :!anyOver&&ref>g.budget+0.5?`<div class="info" style="margin-bottom:8px">החריגה היא בהתקשרות הכוללת (${money(g.commit)}) מול תקציב של ${money(g.budget)}, ולא במלאכה מסוימת.</div>`:'';
+    :!anyOver&&ref>g.budget+0.5?`<div class="info" style="margin-bottom:8px">החריגה היא ב${g.commit?'התקשרות הכוללת':'צפי העלות'} (${money(g.known)}) מול תקציב של ${money(g.budget)}, ולא במלאכה מסוימת.${g.commit?'':' כדי לתקן את התקציב לסכום הנכון לחצו «✏️ עדכון» בשורה.'}</div>`:'';
   const pc=x=>x.b?` <span style="font-size:11px">(+${fmtPct((x.f-x.b)/x.b*100)})</span>`:'';
   const trSel=r=>one&&!isVO(r)?'':`<select class="ti" data-rtrade="${r.id}" style="max-width:190px;font-size:12px"><option value="">— שיוך למלאכה —</option>${TR.map(t=>`<option${t===trOf(r)?' selected':''}>${esc(t)}</option>`).join('')}</select>${isAuto(r)?' <span class="chip xs y" title="שיוך אוטומטי לפי תיאור השורה">אוטו׳</span>':''}`;
   const rowsL=L=>'<div style="max-height:230px;overflow:auto">'+L.map(r=>`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:2px 0"><button class="btn ghost sm" data-ed="${r.id}" data-t="expense" style="padding:1px 6px">${esc(r.desc||'—')} · ${money(r.amount)} · ${fmtD(r.date)}${isPaid(r)?' ✓ שולם':''}</button>${trSel(r)}</div>`).join('')+'</div>';
@@ -2021,15 +2051,15 @@ function renderBudget(){
   const B=S.budget, P=budParties();
   $('#cB').textContent=B.length;
   const sum=k=>P.reduce((a,g)=>a+g[k],0);
-  const tb=sum('budget'), ts=sum('sell'), tc=sum('commit'), tf=sum('forecast'), ta=sum('actual');
+  const tb=sum('budget'), ts=sum('sell'), tc=sum('commit'), tf=sum('forecast'), ta=sum('actual'), tfc=P.reduce((a,g)=>a+(g.commit?0:g.fc),0), nfc=P.filter(g=>!g.commit&&g.fc).length;
   const unc=B.filter(i=>i.trade===UNCL).length, autoN=B.filter(i=>i.auto&&(i.auto.trade||i.auto.party)).length;
-  const over=P.filter(g=>Math.max(g.commit,g.forecast)>g.budget+0.5);
+  const over=P.filter(g=>g.ref>g.budget+0.5);
   const k=[
     {l:'תקציב עלות (סה״כ)',v:money(tb),f:B.length+' סעיפים · '+new Set(B.map(i=>i.trade)).size+' מלאכות · '+P.filter(g=>g.party).length+' קבלנים/ספקים',c:''},
     {l:'מועמס / מחיר ללקוח',v:ts?money(ts):'—',f:ts?'תקורה ורווח מתוכננים: '+money(ts-tb)+' ('+(tb?Math.round((ts-tb)/tb*1000)/10:0)+'%)':'לא מופתה עמודת מועמס',c:ts?'pos':''},
-    {l:'התקשרויות (חוזים/הזמנות)',v:money(tc),f:tb?Math.round(tc/tb*100)+'% מהתקציב':'',c:''},
+    {l:'התקשרויות (חוזים/הזמנות)',v:money(tc),f:(tb?Math.round(tc/tb*100)+'% מהתקציב':'')+(nfc?' · צפי עלות ל-'+nfc+' גורמים נוספים: '+money(tfc):''),c:''},
     {l:'צפי הוצאות בתזרים',v:money(tf),f:'שולם בפועל: '+money(ta)+(tb?' · '+Math.round(ta/tb*100)+'% מהתקציב':''),c:''},
-    {l:'חריגות מהתקציב',v:over.length?over.length+' גורמים':'אין',f:over.length?'סה״כ חריגה: '+money(over.reduce((a,g)=>a+Math.max(g.commit,g.forecast)-g.budget,0)):'התקשרויות וצפי בתוך התקציב',c:over.length?'neg':'pos'},
+    {l:'חריגות מהתקציב',v:over.length?over.length+' גורמים':'אין',f:over.length?'סה״כ חריגה: '+money(over.reduce((a,g)=>a+g.ref-g.budget,0)):'התקשרויות, צפי עלות וצפי בתזרים בתוך התקציב',c:over.length?'neg':'pos'},
     {l:'לבדיקה ידנית',v:unc+' לא מסווגים',f:autoN+' סעיפים עם סיווג אוטומטי שטרם אושר',c:unc?'warn':''}
   ];
   $('#bKpis').innerHTML=B.length?k.map(x=>`<div class="kpi ${x.c}"><div class="lbl">${esc(x.l)}</div><div class="val num">${esc(x.v)}</div><div class="foot">${esc(x.f)}</div></div>`).join(''):'';
@@ -2038,8 +2068,8 @@ function renderBudget(){
   const ALM=new Map(alList().open.map(a=>[a.key,a]));
   const budNames=new Set(P.map(g=>g.party));
   const unEx=S.expenses.filter(r=>!budNames.has(r.party||'')&&r.status!=='בוטל');
-  const showSell=ts>0, NC=showSell?11:10;
-  const bcSt=g=>{const ref=Math.max(g.commit,g.forecast);return ALM.get('p:'+g.party)||ref>g.budget+0.5?'over':!g.forecast?'none':g.forecast+0.5<g.budget?'part':'ok';};
+  const showSell=ts>0, NC=showSell?12:11;
+  const bcSt=g=>{const ref=g.ref;return ALM.get('p:'+g.party)||ref>g.budget+0.5?'over':!g.forecast?'none':g.forecast+0.5<g.budget?'part':'ok';};
   const fS=$('#bcStat').value, fTr=$('#bcTrade').value, fQ=($('#bcQ').value||'').trim();
   const trSel=$('#bcTrade'), prevTr=trSel.value;
   trSel.innerHTML='<option value="">כל המלאכות</option>'+[...new Set(B.map(i=>i.trade))].map(t=>`<option${t===prevTr?' selected':''}>${esc(t)}</option>`).join('');
@@ -2048,24 +2078,25 @@ function renderBudget(){
   const PS=fS==='nob'?[]:PF, sm=k=>PS.reduce((a,g)=>a+g[k],0);
   $('#bcCount').textContent=filt||fS==='nob'?`מוצגים ${PS.length} מתוך ${P.length}`:'';
   $('#tBCtl').innerHTML=!B.length?'<tbody><tr><td><div class="empty"><div class="big">📋</div>עדיין לא הועלה תקציב לפרויקט. העלו קובץ Excel של התקציב / ניתוח העלויות, או הוסיפו סעיפים ידנית.</div></td></tr></tbody>':
-    `<thead><tr><th>קבלן / ספק</th><th>מלאכות</th><th>תקציב עלות</th>${showSell?'<th>מועמס</th>':''}<th>התקשרות (₪)</th><th>צפי בתזרים</th><th>שולם בפועל</th><th>יתרת תקציב</th><th>ניצול</th><th>סטטוס</th><th></th></tr></thead><tbody>`+
+    `<thead><tr><th>קבלן / ספק</th><th>מלאכות</th><th>תקציב עלות</th>${showSell?'<th>מועמס</th>':''}<th>התקשרות</th><th>צפי עלות</th><th>צפי בתזרים</th><th>שולם בפועל</th><th>יתרת תקציב</th><th>ניצול</th><th>סטטוס</th><th></th></tr></thead><tbody>`+
     (PS.length||showUn?'':`<tr><td colspan="${NC}"><div class="empty">אין קבלנים או ספקים שעונים על הסינון</div></td></tr>`)+
     PS.map(g=>{
-      const ref=Math.max(g.commit,g.forecast), rest=g.budget-ref, use=g.budget?g.actual/g.budget*100:0;
+      const ref=g.ref, rest=g.budget-ref, use=g.budget?g.actual/g.budget*100:0;
       const st=ref>g.budget+0.5?'<span class="chip r">חריגה</span>':(!g.forecast?'<span class="chip">טרם נפרס לתזרים</span>':(g.forecast+0.5<g.budget?'<span class="chip y">נפרס חלקית</span>':'<span class="chip g">תקין</span>'));
       const A=ALM.get('p:'+g.party), isOver=bcSt(g)==='over', open=BC_OPEN.has(g.party);
       return `<tr${A?alRowAttr(A.pct,A.crit):''}><td style="white-space:normal;min-width:130px"><button class="bcx" data-bcx="${esc(g.party)}" title="פירוט לפי סעיף תקציב">${open?'▾':'◂'} <b>${esc(g.party||'ללא קבלן/ספק משויך')}</b></button>${isOver?`<div style="font-size:11px;opacity:.85">${open?'':'לחצו לפירוט החריגה'}</div>`:''}</td>
         <td style="white-space:normal;min-width:110px;font-size:12px" class="mut">${esc([...g.trades].join(', '))}</td>
         <td class="num"><b>${money(g.budget)}</b></td>${showSell?`<td class="num">${g.sell?money(g.sell):'<span class="mut">—</span>'}</td>`:''}
-        <td><input class="ti num" inputmode="decimal" data-commit="${esc(g.party)}" value="${g.commit?money(g.commit).replace('₪',''):''}" placeholder="—" style="width:105px"></td>
+        <td class="num bcfc" data-bfc="${esc(g.party)}" title="לחצו לעדכון">${g.commit?'<b>'+money(g.commit)+'</b>':'<span class="mut">—</span>'}</td>
+        <td class="bcfc" data-bfc="${esc(g.party)}" title="לחצו לעדכון" style="white-space:normal;min-width:110px">${g.fc?`<div class="num"${g.commit?' style="opacity:.6"':''}>${money(g.fc)}</div>${g.fcBasis?`<span class="chip xs">${esc(g.fcBasis)}</span>`:''}${g.fcNote?`<div class="mut" style="font-size:11px">${esc(g.fcNote)}</div>`:''}`:'<span class="mut">—</span>'}</td>
         <td class="num">${g.forecast?money(g.forecast):'<span class="mut">—</span>'}</td><td class="num">${g.actual?money(g.actual):'<span class="mut">—</span>'}</td>
         <td class="num ${rest<0?'neg':'pos'}"><b>${money(rest)}</b></td>
         <td style="min-width:70px"><div class="bar"><i style="width:${Math.min(100,use)}%;${use>100?'background:var(--neg)':''}"></i></div><span class="mut" style="font-size:11px">${Math.round(use)}%</span></td>
-        <td>${A?`<b>${A.crit?'⚠ ':''}${A.pct!=null?'+'+fmtPct(A.pct):'חריגה'}</b>`:st}</td><td><button class="btn sm" data-bspread="${esc(g.party)}">פריסה</button></td></tr>`+
+        <td>${A?`<b>${A.crit?'⚠ ':''}${A.pct!=null?'+'+fmtPct(A.pct):'חריגה'}</b>`:st}</td><td style="white-space:nowrap"><button class="btn sm" data-bfc="${esc(g.party)}" title="עדכון התקשרות / צפי עלות">✏️ עדכון</button> <button class="btn sm" data-bspread="${esc(g.party)}">פריסה</button></td></tr>`+
         (open?`<tr class="bcd"><td colspan="${NC}">${bcDetail(g,A)}</td></tr>`:'');}).join('')+
-    (showUn?`<tr><td><span class="mut">הוצאות בתזרים ללא סעיף תקציב</span></td><td class="mut" style="white-space:normal">${esc([...new Set(unEx.map(r=>r.party||'ללא שיוך'))].slice(0,4).join(', '))}${new Set(unEx.map(r=>r.party)).size>4?'…':''}</td><td class="num">—</td>${showSell?'<td></td>':''}<td></td>
+    (showUn?`<tr><td><span class="mut">הוצאות בתזרים ללא סעיף תקציב</span></td><td class="mut" style="white-space:normal">${esc([...new Set(unEx.map(r=>r.party||'ללא שיוך'))].slice(0,4).join(', '))}${new Set(unEx.map(r=>r.party)).size>4?'…':''}</td><td class="num">—</td>${showSell?'<td></td>':''}<td></td><td></td>
       <td class="num">${money(unEx.reduce((a,r)=>a+(Number(r.amount)||0),0))}</td><td class="num">${money(unEx.reduce((a,r)=>a+(Number(r.actualAmount)||0),0))}</td><td></td><td></td><td><span class="chip y">ללא תקציב</span></td><td></td></tr>`:'')+
-    `</tbody><tfoot><tr><td colspan="2">סה״כ${filt?' (מסונן)':''}</td><td class="num">${money(sm('budget'))}</td>${showSell?`<td class="num">${money(sm('sell'))}</td>`:''}<td class="num">${money(sm('commit'))}</td><td class="num">${money(sm('forecast'))}</td><td class="num">${money(sm('actual'))}</td><td class="num">${money(sm('budget')-PS.reduce((a,g)=>a+Math.max(g.commit,g.forecast),0))}</td><td colspan="3"></td></tr></tfoot>`;
+    `</tbody><tfoot><tr><td colspan="2">סה״כ${filt?' (מסונן)':''}</td><td class="num">${money(sm('budget'))}</td>${showSell?`<td class="num">${money(sm('sell'))}</td>`:''}<td class="num">${money(sm('commit'))}</td><td class="num">${money(PS.reduce((a,g)=>a+(g.commit?0:g.fc),0))}</td><td class="num">${money(sm('forecast'))}</td><td class="num">${money(sm('actual'))}</td><td class="num">${money(sm('budget')-PS.reduce((a,g)=>a+g.ref,0))}</td><td colspan="3"></td></tr></tfoot>`;
 
   // ---- lines table grouped by trade
   const tf_=$('#bTradeF'), prevT=tf_.value;
@@ -2107,6 +2138,59 @@ function renderBudget(){
   }).join('');
   const tot=items.reduce((a,i)=>a+(Number(i.total)||0),0), tsl=items.reduce((a,i)=>a+(Number(i.sell)||0),0);
   t.innerHTML=head+'<tbody>'+body+`</tbody><tfoot><tr><td colspan="5">סה״כ ${items.length} סעיפים${items.length<B.length?' (מסונן)':''}</td><td class="num">${money(tot)}</td><td class="num">${tsl?money(tsl):''}</td><td colspan="5"></td></tr></tfoot>`;
+}
+/* ---------- עדכון התקשרות / צפי עלות לגורם, כולל תיקון תקציב ---------- */
+let FC_P=null;
+function fcGroup(){return budParties().find(x=>x.party===FC_P);}
+function openFc(party){
+  FC_P=party; const g=fcGroup(); if(!g) return;
+  $('#fcTitle').textContent='עדכון עלות – '+(party||'ללא קבלן/ספק');
+  $('#fcInfo').innerHTML=`תקציב עלות: <b>${money(g.budget)}</b> · ${g.lines} סעיפים${g.forecast?` · צפי בתזרים: ${money(g.forecast)}`:''}`;
+  $('#fcCommit').value=g.commit?money(g.commit).replace('₪','').trim():'';
+  $('#fcAmt').value=g.fc?money(g.fc).replace('₪','').trim():'';
+  $('#fcBasis').value=g.fcBasis||''; $('#fcNote').value=g.fcNote||'';
+  document.querySelector('input[name="fcAct"][value="keep"]').checked=true; $('#fcWhy').value='';
+  fcUI(); $('#ovFc').classList.add('on'); setTimeout(()=>$(g.commit?'#fcCommit':'#fcAmt').focus(),50);
+}
+function fcVals(){return {c:parseNum($('#fcCommit').value)||0,f:parseNum($('#fcAmt').value)||0};}
+function fcUI(){
+  const g=fcGroup(); if(!g) return; const v=fcVals(), known=v.c||v.f, over=known>g.budget+0.5;
+  $('#fcOver').style.display=over?'':'none';
+  if(over) $('#fcOverTxt').textContent=`${v.c?'ההתקשרות':'צפי העלות'} (${money(known)}) גבוה מהתקציב (${money(g.budget)}) ב-${money(known-g.budget)}${g.budget?' ('+fmtPct((known-g.budget)/g.budget*100)+')':''}. מה לעשות?`;
+  const fix=over&&document.querySelector('input[name="fcAct"]:checked').value==='fix';
+  $('#fcWhyW').style.display=fix?'':'none';
+}
+/* תיקון התקציב של גורם לסכום חדש: סעיף יחיד מתעדכן, כמה סעיפים מקבלים שורת תיקון */
+function budFix(party,to,why){
+  const L=S.budget.filter(i=>(i.party||'')===party); if(!L.length) return;
+  const from=r2(L.reduce((a,i)=>a+(Number(i.total)||0),0)), d=r2(to-from); if(Math.abs(d)<0.005) return;
+  const tag='תיקון תקציב '+fmtD(new Date())+': '+money(from)+' ← '+money(to)+' · '+why;
+  if(L.length===1){
+    const it=L[0], q=Number(it.qty);
+    it.total=r2(to); if(it.qty!==''&&q) it.price=r2(to/q); else if(it.price!=='') it.price=r2(to);
+    it.notes=[it.notes,tag].filter(Boolean).join(' | '); it.corr=true;
+  }else{
+    const big=L.slice().sort((a,b)=>(Number(b.total)||0)-(Number(a.total)||0))[0];
+    S.budget.push({id:uid(),desc:'תיקון תקציב – '+why,code:'',unit:'קומפ׳',qty:1,price:d,total:d,sell:'',chapter:big.chapter||'',chapterText:big.chapterText||'',sub:'',
+      trade:big.trade,party,cat:big.cat,notes:tag,corr:true,auto:{trade:false,party:false,cat:false}});
+  }
+}
+function saveFc(){
+  const g=fcGroup(); if(!g) return; const v=fcVals(), known=v.c||v.f, over=known>g.budget+0.5;
+  const fix=over&&document.querySelector('input[name="fcAct"]:checked').value==='fix', why=$('#fcWhy').value.trim();
+  if(fix&&!why){toast('כתבו את סיבת תיקון התקציב');$('#fcWhy').focus();return;}
+  const P=FC_P;
+  if(v.c) S.budgetCommit[P]=v.c; else delete S.budgetCommit[P];
+  if(!S.budgetFc) S.budgetFc={};
+  const basis=$('#fcBasis').value, note=$('#fcNote').value.trim();
+  if(v.f||note) S.budgetFc[P]={amt:v.f,basis,note}; else delete S.budgetFc[P];
+  if(fix) budFix(P,known,why);
+  const n0=(S.alLog||[]).length;
+  save();
+  if(fix&&Array.isArray(S.alLog)) S.alLog.slice(n0).forEach(i=>{if(i.t==='budget'&&i.party===P){i.why='תיקון טעות';i.note=why;}});
+  if(fix) persist();
+  $('#ovFc').classList.remove('on'); renderBudget();
+  toast(fix?'התקציב תוקן ל-'+money(known)+' והשינוי נרשם ביומן':'נשמר');
 }
 function budEdit(id,f,v){
   const it=S.budget.find(i=>i.id===id); if(!it) return;
@@ -2159,7 +2243,7 @@ function spreadPlan(){
   const base=$('#spBase').value, rest=$('#spRest').checked;
   const mode=$('#spAdvMode').value, val=Number($('#spAdvVal').value)||0, off=$('#spAdvOff').checked;
   return budParties().filter(g=>spreadParty===null||g.party===spreadParty).map(g=>{
-    const target=base==='commit'&&g.commit?g.commit:g.budget;
+    const target=base==='commit'&&g.known?g.known:g.budget;
     let amt=r2(rest?target-g.forecast:target), adv=0, advSkip=false;
     if(mode!=='none'&&val>0&&amt>0.5){
       if(hasAdvance(g.party)) advSkip=true;
@@ -4771,11 +4855,12 @@ function alRowAttr(pct,crit,acked){
 function alPartyMap(){return new Map(alList().open.filter(a=>a.key.startsWith('p:')).map(a=>[a.party,a]));}
 /* מצב נוכחי לכל ספק / קבלן: צפי בתזרים, התקשרות, תקציב, שולם */
 function alState(){
-  const P={}, g=n=>P[n]||(P[n]={f:0,c:0,b:0,p:0});
+  const P={}, g=n=>P[n]||(P[n]={f:0,c:0,b:0,p:0,e:0});
   S.expenses.forEach(r=>{const n=(r.party||'').trim()||'ללא שיוך'; if(r.status==='בוטל') {g(n);return;}
     g(n).f+=Number(r.amount)||0; g(n).p+=Number(r.actualAmount)||0;});
   S.budget.forEach(i=>{const n=(i.party||'').trim(); if(n) g(n).b+=Number(i.total)||0;});
   Object.entries(S.budgetCommit||{}).forEach(([n,v])=>{if(n) g(n).c=Number(v)||0;});
+  Object.entries(S.budgetFc||{}).forEach(([n,v])=>{const a=v&&Number(v.amt)||0; if(n&&a) g(n).e=a;});
   Object.values(P).forEach(x=>{x.f=r2(x.f);x.b=r2(x.b);x.p=r2(x.p);});
   const T={f:0,b:0,c:0,p:0}; Object.values(P).forEach(x=>{T.f+=x.f;T.b+=x.b;T.c+=x.c;T.p+=x.p;});
   return {P,T:{f:r2(T.f),b:r2(T.b),c:r2(T.c),p:r2(T.p)}};
@@ -4804,16 +4889,16 @@ function alList(){
     const bs=B.P[n], rs=[];
     if(bs&&bs.f>0&&Math.abs(x.f-bs.f)>0.5){ if(x.f>bs.f) rs.push(R('chg',bs.f,x.f,'צפי בתזרים לעומת הבסיס')); else sav.push({party:n,...R('chg',bs.f,x.f,'ירידה לעומת הבסיס')}); }
     if(x.c>0&&x.f>x.c+0.5) rs.push(R('com',x.c,x.f));
-    if(x.b>0&&Math.max(x.c,x.f)>x.b+0.5) rs.push(R('bud',x.b,Math.max(x.c,x.f),x.c>x.f?'התקשרות מעל התקציב':'צפי בתזרים מעל התקציב'));
+    const kn=x.c||x.e||0; if(x.b>0&&Math.max(kn,x.f)>x.b+0.5) rs.push(R('bud',x.b,Math.max(kn,x.f),kn>x.f?(x.c?'התקשרות מעל התקציב':'צפי עלות מעל התקציב'):'צפי בתזרים מעל התקציב'));
     const ref=x.c>0?x.c:x.f; if(x.p>0&&ref>0&&x.p>ref+0.5) rs.push(R('paid',ref,x.p,x.c>0?'שולם מעל ההתקשרות':'שולם מעל הצפי בתזרים'));
     if(hasBud&&!x.b&&x.f>0.5) rs.push({k:'nob',from:0,to:x.f,diff:x.f,pct:100,label:AL_REASONS.nob});
     else if(!hasBud&&!bs&&x.f>0.5&&B.T.f>0) rs.push({k:'neu',from:0,to:x.f,diff:x.f,pct:r2(x.f/B.T.f*100),label:AL_REASONS.neu+' (מתוך עלות הבסיס)'});
     if(rs.length) out.push({key:'p:'+n,party:n,reasons:rs});
   });
   // הפרויקט כולו
-  const T=st.T, trs=[], ref=Object.values(st.P).reduce((a,x)=>a+Math.max(x.c,x.f),0);
+  const T=st.T, trs=[], ref=Object.values(st.P).reduce((a,x)=>a+Math.max(x.c||x.e||0,x.f),0);
   if(B.T.f>0&&T.f>B.T.f+0.5) trs.push(R('tchg',B.T.f,T.f));
-  if(T.b>0&&ref>T.b+0.5) trs.push(R('tbud',T.b,ref,'התקשרויות וצפי מעל התקציב הכולל'));
+  if(T.b>0&&ref>T.b+0.5) trs.push(R('tbud',T.b,ref,'התקשרויות וצפי עלות מעל התקציב הכולל'));
   const C=Number(S.settings.contractTotal)||0; if(C>0&&T.f>C+0.5) trs.push(R('tcon',C,T.f));
   if(trs.length) out.push({key:AL_TOT,party:'הפרויקט כולו',reasons:trs});
   // יתרת מזומנים: החודש הראשון מהיום והלאה שיורד מתחת לרף או מתחת לאפס
@@ -5111,9 +5196,9 @@ function rpBal(){
     const rows=[...names].map(n=>{
       const g=bp.get(n), ex=S.expenses.filter(r=>r.party===n&&r.status!=='בוטל');
       const planned=sumK(ex,'amount'), paid=ex.filter(isPaid).reduce((a,r)=>a+(Number(r.actualAmount)||0),0);
-      const contract=g?(g.commit||g.budget):planned, v=findParty('expense',n), ret=Number(v&&v.retention)||0;
+      const contract=g?(g.known||g.budget):planned, v=findParty('expense',n), ret=Number(v&&v.retention)||0;
       const rc=retCalc('expense',n);
-      return {proj:pname(pr),party:n,src:g?(g.commit?'התקשרות':'תקציב'):'שורות תזרים',contract:r2(contract),planned:r2(planned),paid:r2(paid),
+      return {proj:pname(pr),party:n,src:g?(g.commit?'התקשרות':g.fc?'צפי עלות'+(g.fcBasis?' ('+g.fcBasis+')':''):'תקציב'):'שורות תזרים',contract:r2(contract),planned:r2(planned),paid:r2(paid),
         left:r2(contract-paid),pctPaid:contract?Math.round(paid/contract*100):'',ret:ret?ret+'%':'',retHeld:ret?rc.held:'',
         _late:planned>contract+0.5,_al:ALP.has(n)?{pct:ALP.get(n).pct,crit:ALP.get(n).crit}:null};
     }).sort((a,b)=>b.left-a.left);
@@ -5180,7 +5265,7 @@ function rpRet(){
 
 /* בקרת תקציב: לפי מלאכה, ובתוכה לפי קבלן / ספק */
 function rpBud(){
-  const scope=rpScope(), multi=scope.length>1, groups=[]; const T={budget:0,commit:0,forecast:0,actual:0,actB:0,over:0,n:0};
+  const scope=rpScope(), multi=scope.length>1, groups=[]; const T={budget:0,commit:0,fc:0,forecast:0,actual:0,actB:0,over:0,n:0};
   scope.forEach(pr=>withProj(pr,()=>{
     if(!S.budget.length&&!S.expenses.length) return;
     const P=new Map(budParties().map(g=>[g.party,g])), ALP=alPartyMap();
@@ -5190,11 +5275,11 @@ function rpBud(){
       const rows=parties.map(n=>{
         const g=P.get(n), L=items.filter(i=>(i.party||'')===n), bud=L.reduce((a,i)=>a+(Number(i.total)||0),0);
         const share=g&&g.budget?bud/g.budget:1, al=k=>r2((g?g[k]:0)*share);
-        const commit=al('commit'), forecast=al('forecast'), actual=al('actual'), ref=Math.max(commit,forecast), rest=r2(bud-ref);
+        const commit=al('commit'), fc=g&&!g.commit?al('fc'):0, forecast=al('forecast'), actual=al('actual'), ref=Math.max(commit||fc,forecast), rest=r2(bud-ref);
         const st=ref>bud+0.5?'חריגה':(!forecast?'טרם נפרס':(forecast+0.5<bud?'נפרס חלקית':'תקין'));
-        T.budget+=bud;T.commit+=commit;T.forecast+=forecast;T.actual+=actual;T.actB+=actual;if(rest<0){T.over+=-rest;T.n++;}
+        T.budget+=bud;T.commit+=commit;T.fc+=fc;T.forecast+=forecast;T.actual+=actual;T.actB+=actual;if(rest<0){T.over+=-rest;T.n++;}
         return {party:n||'ללא קבלן/ספק משויך',ch:[...new Set(L.map(i=>i.chapter).filter(Boolean))].join(', '),lines:L.length,budget:r2(bud),sell:r2(L.reduce((a,i)=>a+(Number(i.sell)||0),0))||'',
-          commit:commit||'',forecast:forecast||'',actual:actual||'',rest,use:bud?Math.round(actual/bud*100):'',st,_late:rest<-0.5,_al:ALP.has(n)?{pct:ALP.get(n).pct,crit:ALP.get(n).crit}:null};
+          commit:commit||'',fc:fc||'',fcb:fc&&g.fcBasis?g.fcBasis+(g.fcNote?' – '+g.fcNote:''):(fc&&g.fcNote?g.fcNote:''),forecast:forecast||'',actual:actual||'',rest,use:bud?Math.round(actual/bud*100):'',st,_late:rest<-0.5,_al:ALP.has(n)?{pct:ALP.get(n).pct,crit:ALP.get(n).crit}:null};
       }).sort((a,b)=>b.budget-a.budget);
       groups.push({title:(multi?pname(pr)+' · ':'')+tr,info:'',rows});
     });
@@ -5204,11 +5289,11 @@ function rpBud(){
         return {party:n,ch:'',lines:L.length,budget:0,sell:'',commit:'',forecast:r2(f),actual:a?r2(a):'',rest:r2(-f),use:'',st:'ללא תקציב',_late:true,_al:ALP.has(n)?{pct:ALP.get(n).pct,crit:ALP.get(n).crit}:null};})});}
   }));
   return {title:'דוח בקרת תקציב – נכון ל-'+fmtD(new Date()),
-    cols:[['party','קבלן / ספק'],['ch','פרקים'],['lines','סעיפים','n'],['budget','תקציב עלות','m'],['sell','מועמס','m','xls'],['commit','התקשרות','m'],['forecast','צפי בתזרים','m'],['actual','שולם בפועל','m'],['rest','יתרת תקציב','m'],['use','% ניצול','pct0'],['st','סטטוס']],
-    groups,sumCols:['lines','budget','sell','commit','forecast','actual','rest'],
-    kpis:[['תקציב עלות',money(T.budget)],['התקשרויות',money(T.commit)+(T.budget?' · '+Math.round(T.commit/T.budget*100)+'%':'')],['צפי בתזרים',money(T.forecast)],['שולם בפועל',money(T.actual)+(T.budget?' · '+Math.round(T.actB/T.budget*100)+'% מהתקציב':'')],['חריגות',T.n?money(T.over)+' · '+T.n+' שורות':'אין']],
+    cols:[['party','קבלן / ספק'],['ch','פרקים'],['lines','סעיפים','n'],['budget','תקציב עלות','m'],['sell','מועמס','m','xls'],['commit','התקשרות','m'],['fc','צפי עלות','m'],['fcb','בסיס הצפי'],['forecast','צפי בתזרים','m'],['actual','שולם בפועל','m'],['rest','יתרת תקציב','m'],['use','% ניצול','pct0'],['st','סטטוס']].filter(c=>T.fc||!['fc','fcb'].includes(c[0])),
+    groups,sumCols:['lines','budget','sell','commit','fc','forecast','actual','rest'],
+    kpis:[['תקציב עלות',money(T.budget)],['התקשרויות',money(T.commit)+(T.budget?' · '+Math.round(T.commit/T.budget*100)+'%':'')],...(T.fc?[['צפי עלות (ללא התקשרות)',money(T.fc)]]:[]),['צפי בתזרים',money(T.forecast)],['שולם בפועל',money(T.actual)+(T.budget?' · '+Math.round(T.actB/T.budget*100)+'% מהתקציב':'')],['חריגות',T.n?money(T.over)+' · '+T.n+' שורות':'אין']],
     empty:'לא הועלה תקציב לפרויקטים שנבחרו. מעלים תקציב בלשונית "תקציב ובקרה".',
-    note:'יתרת התקציב = תקציב העלות פחות הגבוה מבין ההתקשרות והצפי בתזרים. ההתקשרות, הצפי והתשלומים נשמרים לפי קבלן / ספק; כשקבלן משויך לכמה מלאכות הם מתחלקים ביניהן לפי היחס בתקציב. שורה באדום: חריגה מהתקציב או הוצאה ללא תקציב.'};
+    note:'יתרת התקציב = תקציב העלות פחות הגבוה מבין הסכום הקובע (התקשרות, ואם אין – צפי עלות) והצפי בתזרים. צפי עלות מוצג עם הבסיס שלו (הצעת מחיר / הערכה / מחיר שוק). ההתקשרות, הצפי והתשלומים נשמרים לפי קבלן / ספק; כשקבלן משויך לכמה מלאכות הם מתחלקים ביניהן לפי היחס בתקציב. שורה באדום: חריגה מהתקציב או הוצאה ללא תקציב.'};
 }
 
 /* הצמדה למדד: כל תשלום צמוד, מדד הבסיס, המדד הקובע והפרש ההצמדה */
@@ -5581,6 +5666,7 @@ function bind(){
   $('#tBCtl').addEventListener('change',e=>{const el=e.target.closest('[data-commit]');if(!el)return;
     const v=parseNum(el.value)||0; if(v)S.budgetCommit[el.dataset.commit]=v; else delete S.budgetCommit[el.dataset.commit]; save(); renderBudget();});
   $('#tBCtl').addEventListener('click',e=>{const b=e.target.closest('[data-bspread]');if(b)openSpread(b.dataset.bspread);
+    const fc=e.target.closest('[data-bfc]'); if(fc){openFc(fc.dataset.bfc);return;}
     const x=e.target.closest('[data-bcx]'); if(x){const n=x.dataset.bcx; BC_OPEN.has(n)?BC_OPEN.delete(n):BC_OPEN.add(n); renderBudget();}});
   $('#bSpreadAll').onclick=()=>openSpread();
   $('#spAdvClear').onclick=()=>{$('#spAdvMode').value='none';$('#spAdvVal').value='';spreadPreview();};
@@ -5611,7 +5697,10 @@ function bind(){
   $('#bAdd').onclick=()=>{const tr=$('#bTradeF').value||UNCL;const T=tradeOf(tr);
     S.budget.push({id:uid(),desc:'סעיף חדש',code:'',unit:'',qty:'',price:'',total:0,sell:'',chapter:'',chapterText:'',sub:'',trade:tr,party:T.party||'',cat:catFor(T),notes:'',auto:{trade:false,party:false,cat:false}});
     save();renderBudget();const inp=[...$$('#tBud [data-bf="desc"]')].pop();if(inp){inp.focus();inp.select();}};
-  $('#bClear').onclick=()=>{if(!S.budget.length)return;if(confirm('למחוק את כל התקציב של הפרויקט ('+S.budget.length+' סעיפים)? שורות התזרים לא יימחקו.')){S.budget=[];S.budgetCommit={};save();renderBudget();}};
+  ['#fcCommit','#fcAmt'].forEach(x=>$(x).addEventListener('input',fcUI));
+  document.querySelectorAll('input[name="fcAct"]').forEach(x=>x.addEventListener('change',fcUI));
+  $('#fcSave').onclick=saveFc;
+  $('#bClear').onclick=()=>{if(!S.budget.length)return;if(confirm('למחוק את כל התקציב של הפרויקט ('+S.budget.length+' סעיפים)? שורות התזרים לא יימחקו.')){S.budget=[];S.budgetCommit={};S.budgetFc={};save();renderBudget();}};
   $('#btnPaste').onclick=()=>{impMode='cash';
     const txt=$('#pasteBox').value.trim(); if(!txt) return toast('הדביקו טבלה קודם');
     const rows=parseDelimited(txt,sniffSep(txt));
@@ -5644,7 +5733,7 @@ function bind(){
 load(); bind(); syncSettingsUI(); render(); drvBoot();
 if(DB.view==='all'&&DB.projects.length>1) switchProject('__all');
 if(typeof Chart==='undefined') setTimeout(()=>{if(typeof Chart==='undefined')$('#chFallback').style.display='block';else render();},1500);
-window.CF={openRow,smRun,smItem,smApply,renderSmart,aiCfg,aiSet,get SM(){return SM;},alList,alTrack,openAlerts,idxCalc,idxDiff,idxDB,ecCalc,ecApply,devApply,devBankSim,devD,fxApply,openEc,renderExec,get S(){return S;},get DRV(){return DRV;},drvSync,drvSyncFiles,dirLookup,fget,openParty,classifyTrade,budParties,openSpread,get DB(){return DB;},switchProject,newProject,compute,payDate,parseNum,parseDate,parseTerms,parseDelimited,demo,save,render,
+window.CF={openFc,saveFc,budFix,openRow,smRun,smItem,smApply,renderSmart,aiCfg,aiSet,get SM(){return SM;},alList,alTrack,openAlerts,idxCalc,idxDiff,idxDB,ecCalc,ecApply,devApply,devBankSim,devD,fxApply,openEc,renderExec,get S(){return S;},get DRV(){return DRV;},drvSync,drvSyncFiles,dirLookup,fget,openParty,classifyTrade,budParties,openSpread,get DB(){return DB;},switchProject,newProject,compute,payDate,parseNum,parseDate,parseTerms,parseDelimited,demo,save,render,
   add(type,o){rowsOf(type).push(Object.assign({id:uid(),status:'צפוי',terms:'',basis:'',actualAmount:'',actualDate:''},o));save();render();}};
 </script>
 </body>
