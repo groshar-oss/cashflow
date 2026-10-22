@@ -1504,30 +1504,30 @@ function renderFlow(rows){
   const nowK=bucketKey(new Date(),gran);
   const h=`<thead><tr>
     <th>${({m:'חודש',w:'שבוע',q:'רבעון',y:'שנה'})[gran]}</th>
-    <th>הכנסות צפוי</th><th>הכנסות בפועל</th><th>פער</th>
-    <th>הוצאות צפוי</th><th>הוצאות בפועל</th><th>פער</th>
+    <th>הכנסות צפוי</th><th>הכנסות בפועל</th><th title="התקבל בפועל פחות הצפוי. מוצג רק לחודשים שהגיעו. מינוס = התקבל פחות מהצפוי">פער</th>
+    <th>הוצאות צפוי</th><th>הוצאות בפועל</th><th title="שולם בפועל פחות הצפוי. מוצג רק לחודשים שהגיעו. מינוס = שולם פחות מהצפוי">פער</th>
     <th>נטו צפוי</th><th>נטו בפועל</th>
     <th>יתרה מצטברת (צפוי)</th><th>יתרה מצטברת (בפועל)</th></tr></thead>`;
   const b=rows.map(r=>{
-    const gapI=r.ai-r.ei, gapE=r.ae-r.ee;
+    const gapI=r.ai-r.ei, gapE=r.ae-r.ee, fut=r.k>nowK; // חודש עתידי: אין עדיין בפועל, אין פער
     const cls=(r.cumF<0?'gap ':'')+(r.k===nowK?'now':'');
     return `<tr class="${cls}">
       <td>${esc(r.label)}</td>
       <td class="num">${r.ei?money(r.ei):'<span class="mut">—</span>'}</td>
       <td class="num">${r.ai?money(r.ai):'<span class="mut">—</span>'}</td>
-      <td class="num ${gapI>=0?'pos':'neg'}">${(r.ei||r.ai)?money(gapI):''}</td>
+      <td class="num ${gapI>=0?'pos':'neg'}">${fut?'':(r.ei||r.ai)?money(gapI):''}</td>
       <td class="num">${r.ee?money(r.ee):'<span class="mut">—</span>'}</td>
       <td class="num">${r.ae?money(r.ae):'<span class="mut">—</span>'}</td>
-      <td class="num ${gapE<=0?'pos':'neg'}">${(r.ee||r.ae)?money(gapE):''}</td>
+      <td class="num ${gapE<=0?'pos':'neg'}">${fut?'':(r.ee||r.ae)?money(gapE):''}</td>
       <td class="num ${r.netF>=0?'pos':'neg'}"><b>${money(r.netF)}</b></td>
       <td class="num ${r.netA>=0?'pos':'neg'}">${(r.ai||r.ae)?money(r.netA):'<span class="mut">—</span>'}</td>
       <td class="num ${r.cumF>=0?'pos':'neg'}"><b>${money(r.cumF)}</b></td>
-      <td class="num ${r.cumA>=0?'pos':'neg'}">${money(r.cumA)}</td></tr>`;
+      <td class="num ${r.cumA>=0?'pos':'neg'}">${fut?'<span class="mut">—</span>':money(r.cumA)}</td></tr>`;
   }).join('');
-  const sum=k=>rows.reduce((s,r)=>s+r[k],0);
+  const sum=k=>rows.reduce((s,r)=>s+r[k],0), sumP=k=>rows.filter(r=>r.k<=nowK).reduce((s,r)=>s+r[k],0);
   const f=`<tfoot><tr><td>סה״כ</td>
-    <td class="num">${money(sum('ei'))}</td><td class="num">${money(sum('ai'))}</td><td class="num">${money(sum('ai')-sum('ei'))}</td>
-    <td class="num">${money(sum('ee'))}</td><td class="num">${money(sum('ae'))}</td><td class="num">${money(sum('ae')-sum('ee'))}</td>
+    <td class="num">${money(sum('ei'))}</td><td class="num">${money(sum('ai'))}</td><td class="num">${money(sumP('ai')-sumP('ei'))}</td>
+    <td class="num">${money(sum('ee'))}</td><td class="num">${money(sum('ae'))}</td><td class="num">${money(sumP('ae')-sumP('ee'))}</td>
     <td class="num">${money(sum('ei')-sum('ee'))}</td><td class="num">${money(sum('ai')-sum('ae'))}</td>
     <td class="num">${money(rows[rows.length-1].cumF)}</td><td class="num">${money(rows[rows.length-1].cumA)}</td></tr></tfoot>`;
   t.innerHTML=h+'<tbody>'+b+'</tbody>'+f;
@@ -1935,7 +1935,8 @@ function classifyTrade(desc,num,ctx){
     TRADES.forEach(t=>t.kw.forEach(k=>{if(!L.includes(k))return;const v=k.length+(L.trimStart().startsWith(k)?5:0);if(v>sc){sc=v;best=t.k;}}));return best;};
   return spD(d)||kw(d)||sp(ctx||'')||kw(ctx||'')||UNCL;
 }
-function chNum(s){const m=String(s==null?'':s).match(/פרק\s*(\d{1,3})/)||String(s==null?'':s).match(/^\s*(\d{1,3})\s*$/);return m?m[1].padStart(2,'0'):'';}
+function chNum(s){const t=String(s==null?'':s), h=t.match(/פרק\s*([א-ת]\.\d{1,3})(?![.\d])/)||t.match(/^\s*([א-ת]\.\d{1,3})\s*$/); if(h) return h[1];
+  const m=t.match(/פרק\s*(\d{1,3})/)||t.match(/^\s*(\d{1,3})\s*$/);return m?m[1].padStart(2,'0'):'';}
 function budRecords(){
   const m=IMP.map, out=[]; let ch={num:'',text:''}, sub='', skip=false;
   const hdrDesc=m.desc==null?'':String((IMP.rows[Number($('#mHeadRow').value)]||[])[m.desc]||'').trim();
@@ -1949,7 +1950,7 @@ function budRecords(){
     if(total==null){ // שורת פרק / כותרת משנה
       if(isSum) return;
       const text=desc||chCell; if(!text||isNumLike(text)||(hdrDesc&&text===hdrDesc)) return; // שורת כותרות חוזרת
-      const n=chNum(chCell)||chNum(desc);
+      const n=chNum(chCell)||chNum(desc)||chNum(g('code'));
       if(n){ch={num:n,text:desc||chCell};sub='';skip=false;}
       else if(/אינ[ןם]\s*כלול|לא\s*כלול|חלופות|אופציות|ריכוז\s*תקציב/.test(text)) skip=true; // חלופות וריכוז – לא חלק מהתקציב
       else if(/^(תקורות|מוקדמות|הוצאות כלליות)/.test(text)){ch={num:'',text};sub='';skip=false;}
@@ -1958,7 +1959,7 @@ function budRecords(){
     }
     if(!desc||isSum||skip) return;
     let num=chNum(chCell)||ch.num;
-    if(!num){const cm=g('code').match(/^(\d{1,3})[.\-\/]/);if(cm)num=cm[1].padStart(2,'0');}
+    if(!num){const cm=g('code').match(/^([א-ת]\.\d{1,3}|\d{1,3})[.\-\/]/);if(cm)num=/^\d/.test(cm[1])?cm[1].padStart(2,'0'):cm[1];}
     const fileTrade=g('trade');
     let trade=fileTrade||classifyTrade(desc,num,(sub+' '+ch.text).trim());
     if(trade===UNCL&&!fileTrade&&/^(תקורות|מוקדמות|הוצאות כלליות)/.test(ch.text)&&TRADES.some(t=>t.k==='מוקדמות והוצאות כלליות')) trade='מוקדמות והוצאות כלליות';
@@ -3047,6 +3048,7 @@ function parseDate(v){
   if(m) return m[2]+'-'+pad(m[1])+'-01';
   m=s.match(/^(\d{4})[-/.](\d{1,2})$/);
   if(m) return m[1]+'-'+pad(m[2])+'-01';
+  if(!(v instanceof Date)&&(/[א-ת]/.test(s)||!/\d{4}/.test(s))) return ''; // קוד סעיף כמו א.1.01 אינו תאריך
   const d=(v instanceof Date)?v:new Date(s); if(!isNaN(d)) return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
   return '';
 }
@@ -3357,8 +3359,8 @@ function looksLikeBudget(rows){
   const head=rows.slice(0,15).some(r=>{const t=r.map(T).join('|');return /כמות/.test(t)&&/יח['׳]|יחידה/.test(t)&&/סה["״]כ|עלות|מחיר/.test(t);});
   if(!head) return false;
   let ch=0,code=0; rows.forEach(r=>{const a=T(r[0]),b=T(r[1]);
-    if(/^פרק\s*\d/.test(a)||/^פרק\s*\d/.test(b)) ch++;
-    if(/^\d{1,3}\.\d{2,4}$/.test(a)) code++;});
+    if(/^פרק\s*[א-ת\d]/.test(a)||/(^|\s)פרק\s*[א-ת]?\.?\d/.test(b)||/^סה["״]כ\s*פרק/.test(b)) ch++;
+    if(/^([א-ת]\.?)?\d{1,3}(\.\d{1,4}){1,2}$/.test(a)) code++;});
   return ch>=2||code>=5;
 }
 function budgetGuard(rows){
