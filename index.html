@@ -203,6 +203,8 @@ tr.alrow,.alcard{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .bcfc:hover{outline:1px dashed var(--line,#94a3b8);outline-offset:-3px}
 tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
 .bcdet table.t th,.bcdet table.t td{padding:5px 8px;font-size:12.5px}
+#tBud th.bn,#tBud .ti.num,#tBud tfoot td.num{text-align:right}
+#tBud .ti.num{direction:ltr;unicode-bidi:plaintext}
 </style>
 </head>
 <body>
@@ -2114,7 +2116,7 @@ function renderBudget(){
   const tradeOpts=sel=>tradeNames.map(n=>`<option${n===sel?' selected':''}>${esc(n)}</option>`).join('')+'<option value="__new">+ מלאכה חדשה…</option>';
   const catOpts=sel=>S.settings.cats.map(c=>`<option${c===sel?' selected':''}>${esc(c)}</option>`).join('');
   const A=(i,f)=>i.auto&&i.auto[f]?' <span class="chip xs y" title="סיווג אוטומטי – לחצו כדי לאשר או לשנות">אוטו׳</span>':'';
-  const head=`<thead><tr><th>פרק</th><th style="min-width:280px">תיאור</th><th>יח׳</th><th>כמות</th><th>מחיר יח׳</th><th>סה״כ עלות</th><th>מועמס</th><th style="min-width:170px">מלאכה</th><th style="min-width:190px">קבלן / ספק</th><th style="min-width:150px">סעיף תקציב</th><th style="min-width:150px">הערות</th><th></th></tr></thead>`;
+  const head=`<thead><tr><th>פרק</th><th style="min-width:280px">תיאור</th><th>יח׳</th><th class="bn">כמות</th><th class="bn">מחיר יח׳</th><th class="bn">סה״כ עלות</th><th class="bn">מועמס</th><th style="min-width:170px">מלאכה</th><th style="min-width:190px">קבלן / ספק</th><th style="min-width:150px">סעיף תקציב</th><th style="min-width:150px">הערות</th><th></th></tr></thead>`;
   const body=order.map(tr=>{
     const L=items.filter(i=>i.trade===tr), sub=L.reduce((a,i)=>a+(Number(i.total)||0),0);
     const parties=[...new Set(L.map(i=>i.party))];
@@ -2124,13 +2126,13 @@ function renderBudget(){
         <input class="i" list="dlBud" data-gparty="${esc(tr)}" value="${parties.length===1?esc(parties[0]):''}" placeholder="${parties.length>1?'כמה גורמים – הקלידו כדי לאחד':'שם קבלן / ספק'}" style="max-width:240px;padding:5px 9px;font-weight:400">
       </div></td></tr>`+
       L.map(i=>`<tr>
-        <td class="mut" title="${esc(i.chapterText||'')}">${esc(i.chapter||'')}</td>
+        <td class="mut" title="${esc(i.chapterText||'')}"><bdi dir="ltr">${esc(i.chapter||'')}</bdi></td>
         <td style="white-space:normal"><input class="ti" data-bid="${i.id}" data-bf="desc" value="${esc(i.desc)}">${i.sub?`<div class="mut" style="font-size:11px;padding-inline-start:7px">${esc(i.sub)}</div>`:''}</td>
         <td><input class="ti" data-bid="${i.id}" data-bf="unit" value="${esc(i.unit||'')}" style="min-width:50px;width:60px"></td>
-        <td><input class="ti num" type="number" step="any" data-bid="${i.id}" data-bf="qty" value="${i.qty===''?'':i.qty}" style="width:85px"></td>
-        <td><input class="ti num" type="number" step="any" data-bid="${i.id}" data-bf="price" value="${i.price===''?'':i.price}" style="width:95px"></td>
-        <td><input class="ti num" type="number" step="any" data-bid="${i.id}" data-bf="total" value="${i.total}" style="width:110px;font-weight:600"></td>
-        <td><input class="ti num" type="number" step="any" data-bid="${i.id}" data-bf="sell" value="${i.sell===''||i.sell==null?'':i.sell}" style="width:105px" placeholder="—"></td>
+        <td>${bNum(i,'qty',85)}</td>
+        <td>${bNum(i,'price',95)}</td>
+        <td>${bNum(i,'total',110,'font-weight:600')}</td>
+        <td>${bNum(i,'sell',105)}</td>
         <td style="white-space:nowrap"><select class="ti" data-bid="${i.id}" data-bf="trade" style="width:auto;max-width:170px">${tradeOpts(i.trade)}</select>${A(i,'trade')}</td>
         <td style="white-space:nowrap"><input class="ti" list="dlBud" data-bid="${i.id}" data-bf="party" value="${esc(i.party||'')}" placeholder="שייכו קבלן / ספק" style="width:170px">${A(i,'party')}</td>
         <td><select class="ti" data-bid="${i.id}" data-bf="cat">${catOpts(i.cat)}</select></td>
@@ -2193,6 +2195,13 @@ function saveFc(){
   $('#ovFc').classList.remove('on'); renderBudget();
   toast(fix?'התקציב תוקן ל-'+money(known)+' והשינוי נרשם ביומן':'נשמר');
 }
+/* שדה מספרי בטבלת הסעיפים: מוצג מעוצב (מפריד אלפים, ₪, בלי אגורות); בעריכה מוצג המספר המלא */
+function bFmt(f,v){if(v===''||v==null)return '';const x=Number(v);if(isNaN(x))return '';
+  if(f==='qty') return x.toLocaleString('he-IL',{maximumFractionDigits:2});
+  if(f==='price'&&Math.abs(x)<10&&x%1) return '₪'+x.toLocaleString('he-IL',{maximumFractionDigits:2}); // תעריף קטן (למשל 0.5%) נשאר מדויק
+  return money(x);}
+function bNum(i,f,w,st){const v=i[f]==null?'':i[f];
+  return `<input class="ti num bnum" inputmode="decimal" data-bid="${i.id}" data-bf="${f}" data-raw="${v===''?'':v}" value="${bFmt(f,v)}" placeholder="—" style="width:${w}px${st?';'+st:''}">`;}
 function budEdit(id,f,v){
   const it=S.budget.find(i=>i.id===id); if(!it) return;
   it.auto=it.auto||{};
@@ -2203,7 +2212,7 @@ function budEdit(id,f,v){
     if(it.auto.cat) it.cat=catFor(T);
     it.trade=v; it.auto.trade=false;
   }else if(['qty','price','total','sell'].includes(f)){
-    it[f]=v===''?'':Number(v);
+    const n=parseNum(v); it[f]=n==null?'':n;
     if((f==='qty'||f==='price')&&it.qty!==''&&it.price!=='') it.total=r2(Number(it.qty)*Number(it.price));
   }else{
     it[f]=String(v).trim();
@@ -5660,6 +5669,8 @@ function bind(){
       ensureParty('expense',v,'','',(S.budget.find(i=>i.trade===tr)||{}).cat);save();renderBudget();toast('«'+v+'» שויך לכל סעיפי '+tr);return;}
     if(el.dataset.bid) budEdit(el.dataset.bid,el.dataset.bf,el.value);
   });
+  $('#tBud').addEventListener('focusin',e=>{const el=e.target;if(!el.classList.contains('bnum'))return;el.dataset.fmt=el.value;el.value=el.dataset.raw;el.select();});
+  $('#tBud').addEventListener('focusout',e=>{const el=e.target;if(!el.classList.contains('bnum'))return;if(el.value===el.dataset.raw&&el.dataset.fmt!=null)el.value=el.dataset.fmt;});
   $('#tBud').addEventListener('click',e=>{const b=e.target.closest('[data-brm]');if(!b)return;
     const i=S.budget.findIndex(x=>x.id===b.dataset.brm);if(i>=0&&confirm('למחוק את הסעיף «'+S.budget[i].desc+'»?')){S.budget.splice(i,1);save();renderBudget();}});
   ['#bcStat','#bcTrade'].forEach(x=>$(x).addEventListener('change',renderBudget));
