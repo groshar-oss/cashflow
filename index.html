@@ -252,7 +252,7 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
     <div class="kpis" id="kpis"></div>
     <div class="card" id="alDash"></div>
     <div class="card" id="projSumCard" style="display:none">
-      <div class="card-h"><h3>השוואת פרויקטים</h3><span class="hint">לחיצה על שם פרויקט פותחת אותו</span></div>
+      <div class="card-h"><h3 id="projSumH">השוואת פרויקטים</h3><span class="hint">לחיצה על שם פרויקט פותחת אותו</span></div>
       <div class="tbl-scroll"><table class="t" id="tProjSum"></table></div>
     </div>
 
@@ -629,6 +629,7 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
         </div>
         <div class="fields">
           <div><label class="f">מסגרת אשראי / רף התראה (₪)</label><input class="i num" id="sAlert" type="number" step="0.01"></div>
+          <div><label class="f">קבלן (לתצוגה מאוחדת של כל הפרויקטים שלו)</label><select class="i" id="sGroup"></select></div>
           <div><label class="f">סוג פרויקט</label><select class="i" id="sPtype"><option value="">ביצוע / ניהול (קבלן)</option><option value="dev">יזמות – מגורים (מציג לשונית יזמות)</option></select></div>
           <div><label class="f">חריגה קריטית מעל (%)</label><input class="i num" id="sCrit" type="number" step="0.5" min="0" placeholder="15"></div>
           <div><label class="f">סכומים מוזנים כ-</label>
@@ -1122,13 +1123,20 @@ tr.bcd>td{background:var(--panel);padding:10px 14px;white-space:normal}
 
 <!-- ============ PROJECTS MODAL ============ -->
 <div class="ov" id="ovProj">
-  <div class="modal" style="max-width:820px">
-    <div class="modal-h"><h3>ניהול פרויקטים</h3><div class="spacer"></div><button class="x" data-close>✕</button></div>
+  <div class="modal" style="max-width:1120px">
+    <div class="modal-h"><h3>ניהול פרויקטים וקבלנים</h3><div class="spacer"></div><button class="x" data-close>✕</button></div>
     <div class="modal-b">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
         <input class="i" id="newProjName" placeholder="שם פרויקט חדש (למשל: משרדי X – קומה 12)" style="max-width:360px">
         <button class="btn pri" id="btnNewProj">+ פרויקט חדש</button>
       </div>
+      <h4 style="margin:4px 0 8px">🏗 קבלנים</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <input class="i" id="newGrpName" list="dlGrpCo" placeholder="שם קבלן חדש (אפשר לבחור מספר הטלפונים)" style="max-width:360px"><datalist id="dlGrpCo"></datalist>
+        <button class="btn" id="btnNewGrp">+ קבלן</button>
+      </div>
+      <div class="tbl-scroll" style="border:1px solid var(--line);border-radius:11px;margin-bottom:16px"><table class="t" id="tGrp"></table></div>
+      <h4 style="margin:4px 0 8px">פרויקטים</h4>
       <div class="tbl-scroll" style="border:1px solid var(--line);border-radius:11px"><table class="t" id="tProj"></table></div>
       <p class="mut" style="font-size:12px;margin-bottom:0">לכל פרויקט נתונים נפרדים: סכום חוזה, הכנסות, הוצאות, לקוחות וספקים, סעיפי תקציב והגדרות. ניתן לשנות שם ישירות בטבלה.</p>
     </div>
@@ -1347,9 +1355,9 @@ function save(){ if(ALL) return; const p=curP(); if(p) p.data=S; ecSync(); const
 
 function buildVirtual(){
   const V=blank(), keep=S, cats=new Set(), cl={}, vn={};
-  V.settings.projectName='כל הפרויקטים – תזרים מאוחד';
+  V.settings.projectName=GRP?grpLabel(GRP)+' – תזרים מאוחד':'כל הפרויקטים – תזרים מאוחד';
   let froms=[],tos=[];
-  DB.projects.forEach(p=>{
+  vProjects().forEach(p=>{
     const P=p.data; S=P; const nm=pname(p);
     V.settings.openingBalance+=Number(P.settings.openingBalance)||0;
     V.settings.contractTotal+=Number(P.settings.contractTotal)||0;
@@ -1370,8 +1378,9 @@ function buildVirtual(){
   return V;
 }
 function switchProject(id){
-  if(id==='__all'){ALL=true;DB.view='all';S=buildVirtual();}
-  else{ALL=false;DB.view='';DB.current=id;S=curP().data;}
+  if(id==='__all'){ALL=true;GRP=null;DB.view='all';S=buildVirtual();}
+  else if(String(id).startsWith('grp:')){ALL=true;GRP=id.slice(4);DB.view=id;S=buildVirtual();}
+  else{ALL=false;GRP=null;DB.view='';DB.current=id;S=curP().data;}
   persist(); applyMode(); syncSettingsUI(); render();
   if(ALL) go('dash');
 }
@@ -1379,13 +1388,18 @@ function applyMode(){
   $$('#tabs .tab').forEach(t=>t.style.display=((ALL&&t.dataset.v!=='dash'&&t.dataset.v!=='reports')||(t.dataset.v==='dev'&&(ALL||S.settings.ptype!=='dev')))?'none':'');
   $('#projName').disabled=ALL;
   $('#allBanner').style.display=ALL?'':'none';
+  if(ALL){const n=vProjects().length; $('#allBanner').textContent=(GRP?'תצוגה מאוחדת של '+n+' הפרויקטים של «'+grpLabel(GRP)+'»':'תצוגה מאוחדת של כל הפרויקטים')+': ההכנסות, ההוצאות ויתרות הפתיחה מסוכמים יחד, וכל שורה מחושבת לפי תנאי התשלום של הפרויקט שלה. התצוגה לקריאה בלבד; לעריכת נתונים בחרו פרויקט בודד.';}
   $('#projSumCard').style.display=ALL?'':'none';
 }
 function renderProjSel(){
   const sel=$('#projSel');
-  sel.innerHTML=DB.projects.map(p=>`<option value="${p.id}">${esc(pname(p))}</option>`).join('')+
-    (DB.projects.length>1?`<option value="__all">📊 כל הפרויקטים – תזרים מאוחד</option>`:'');
-  sel.value=ALL?'__all':DB.current;
+  const op=p=>`<option value="${p.id}">${esc(pname(p))}</option>`, G=grpDB().filter(g=>grpProjects(g.id).length), none=DB.projects.filter(p=>!grpOfP(p));
+  sel.innerHTML=G.length?G.map(g=>{const L=grpProjects(g.id);
+      return `<optgroup label="🏗 ${esc(g.name)} (${L.length} פרויקטים)"><option value="grp:${g.id}">📊 ${esc(g.name)} – תזרים מאוחד</option>${L.map(op).join('')}</optgroup>`;}).join('')+
+      (none.length?`<optgroup label="ללא קבלן">${none.map(op).join('')}</optgroup>`:'')+
+      (DB.projects.length>1?`<optgroup label="הכל"><option value="__all">📊 כל הפרויקטים – תזרים מאוחד</option></optgroup>`:'')
+    :DB.projects.map(op).join('')+(DB.projects.length>1?`<option value="__all">📊 כל הפרויקטים – תזרים מאוחד</option>`:'');
+  sel.value=viewId();
 }
 function projStats(p){
   const keep=S; S=p.data; const rows=compute('m'); S=keep;
@@ -1396,25 +1410,28 @@ function projStats(p){
 }
 function renderProjSum(){
   if(!ALL) return;
-  const arr=DB.projects.map(p=>({p,st:projStats(p)}));
+  const arr=vProjects().map(p=>({p,st:projStats(p),al:withProj(p,()=>alList().open.filter(a=>a.key.startsWith('p:')&&a.reasons.some(r=>r.k==='bud'||r.k==='nob')).length)}));
+  $('#projSumH').textContent=GRP?'הפרויקטים של '+grpLabel(GRP):'השוואת פרויקטים';
   const T=k=>arr.reduce((a,x)=>a+x.st[k],0);
-  $('#tProjSum').innerHTML=`<thead><tr><th>פרויקט</th><th>סכום חוזה</th><th>הכנסות צפויות</th><th>הוצאות צפויות</th><th>נטו צפוי</th><th>הכנסות בפועל</th><th>הוצאות בפועל</th><th>יתרה בסוף</th><th>בור מזומנים עמוק</th></tr></thead><tbody>`+
-    arr.map(({p,st})=>`<tr><td><a href="#" data-open="${p.id}"><b>${esc(pname(p))}</b></a></td>
+  $('#tProjSum').innerHTML=`<thead><tr><th>פרויקט</th><th>סכום חוזה</th><th>הכנסות צפויות</th><th>הוצאות צפויות</th><th>נטו צפוי</th><th>הכנסות בפועל</th><th>הוצאות בפועל</th><th>חריגות תקציב</th><th>יתרה בסוף</th><th>בור מזומנים עמוק</th></tr></thead><tbody>`+
+    arr.map(({p,st,al})=>`<tr><td><a href="#" data-open="${p.id}"><b>${esc(pname(p))}</b></a></td>
       <td class="num">${p.data.settings.contractTotal?money(p.data.settings.contractTotal):'<span class="mut">—</span>'}</td>
       <td class="num">${money(st.ei)}</td><td class="num">${money(st.ee)}</td>
       <td class="num ${st.ei-st.ee>=0?'pos':'neg'}"><b>${money(st.ei-st.ee)}</b></td>
       <td class="num">${money(st.ai)}</td><td class="num">${money(st.ae)}</td>
+      <td>${al?`<span class="chip r">${al} גורמים</span>`:'<span class="chip g">אין</span>'}</td>
       <td class="num ${st.end>=0?'pos':'neg'}">${money(st.end)}</td>
       <td class="num ${st.worst&&st.worst.cumF<0?'neg':'pos'}">${st.worst?money(st.worst.cumF)+(st.worst.cumF<0?' <span class="mut">('+esc(st.worst.label)+')</span>':''):'—'}</td></tr>`).join('')+
     `</tbody><tfoot><tr><td>סה״כ ${arr.length} פרויקטים</td><td class="num">${money(arr.reduce((a,x)=>a+(Number(x.p.data.settings.contractTotal)||0),0))}</td>
       <td class="num">${money(T('ei'))}</td><td class="num">${money(T('ee'))}</td><td class="num">${money(T('ei')-T('ee'))}</td>
-      <td class="num">${money(T('ai'))}</td><td class="num">${money(T('ae'))}</td><td class="num">${money(T('end'))}</td><td></td></tr></tfoot>`;
+      <td class="num">${money(T('ai'))}</td><td class="num">${money(T('ae'))}</td><td>${arr.reduce((a,x)=>a+x.al,0)||''}</td><td class="num">${money(T('end'))}</td><td></td></tr></tfoot>`;
 }
 function renderProjList(){
-  $('#tProj').innerHTML=`<thead><tr><th>שם הפרויקט</th><th>הכנסות</th><th>הוצאות</th><th>סכום חוזה</th><th></th></tr></thead><tbody>`+
+  $('#tProj').innerHTML=`<thead><tr><th>שם הפרויקט</th><th>קבלן</th><th>הכנסות</th><th>הוצאות</th><th>סכום חוזה</th><th></th></tr></thead><tbody>`+
     DB.projects.map(p=>{const cur=!ALL&&p.id===DB.current;
       return `<tr${cur?' style="background:var(--brand-soft)"':''}>
       <td><input class="i" data-pren="${p.id}" value="${esc(p.data.settings.projectName||'')}" placeholder="פרויקט ללא שם" style="min-width:220px"></td>
+      <td><select class="i" data-pgrp="${p.id}" style="min-width:150px">${grpOpts(grpOfP(p))}</select></td>
       <td class="num">${p.data.incomes.length}</td><td class="num">${p.data.expenses.length}</td>
       <td class="num">${p.data.settings.contractTotal?money(p.data.settings.contractTotal):'—'}</td>
       <td style="white-space:nowrap">${cur?'<span class="chip b">פתוח</span>':`<button class="btn sm pri" data-popen="${p.id}">פתח</button>`}
@@ -1423,6 +1440,7 @@ function renderProjList(){
 }
 function newProject(name){
   const d=blank(); d.settings.projectName=name||'פרויקט חדש';
+  if(ALL&&GRP) d.settings.group=GRP; // פרויקט חדש מתוך תצוגת קבלן משויך אליו
   const id=uid(); DB.projects.push({id,data:d}); switchProject(id); return id;
 }
 
@@ -1887,7 +1905,7 @@ function syncSettingsUI(){
   const s=S.settings;
   $('#projName').value=s.projectName||''; $('#sOpen').value=s.openingBalance||0; $('#sContract').value=s.contractTotal||'';
   $('#sFrom').value=s.from||''; $('#sTo').value=s.to||''; $('#sVat').value=s.vat??18;
-  $('#sAlert').value=s.alert||0; $('#sCrit').value=s.critPct||15; $('#sPtype').value=s.ptype||''; $('#sVatMode').value=s.vatMode||'net';
+  $('#sAlert').value=s.alert||0; $('#sCrit').value=s.critPct||15; $('#sPtype').value=s.ptype||''; $('#sGroup').innerHTML=grpOpts(s.group||''); $('#sGroup').disabled=ALL; $('#sVatMode').value=s.vatMode||'net';
 }
 
 /* =================== תקציב ובקרה =================== */
@@ -2906,7 +2924,7 @@ async function drvPull(meta){
   drvPulling=true;
   try{
     localStorage.setItem(LSM,JSON.stringify(o)); load();
-    switchProject(DB.view==='all'&&DB.projects.length>1?'__all':DB.current);
+    switchProject(restoreViewId());
   }finally{drvPulling=false;}
   DRV.remoteMod=meta.modifiedTime; DRV.syncedAt=DB.updatedAt||Date.now();
   toast('הנתונים נטענו מ-Google Drive');
@@ -4761,6 +4779,78 @@ function bindBook(){
     if(e.target.closest('#pBkAddRel')) openBk(null,{co:$('#pCompany').value.trim()||$('#pName').value.trim(),type:pEditing&&pEditing.type==='client'?'יזם / לקוח':'ספק / קבלן'});
   });
 }
+/* =================== קבלנים: קיבוץ פרויקטים =================== */
+/* DB.groups=[{id,name,company,coId,contact,phone,email,notes}]; לכל פרויקט S.settings.group = מזהה קבלן ('' = ללא קבלן) */
+let GRP=null; // בתצוגה מאוחדת: מזהה הקבלן, או null = כל הפרויקטים
+function grpDB(){ if(!Array.isArray(DB.groups)) DB.groups=[]; return DB.groups; }
+function grpById(id){return id?grpDB().find(g=>g.id===id):null;}
+function grpOfP(p){const id=p&&p.data&&p.data.settings.group; return grpById(id)?id:'';}
+function grpProjects(id){return DB.projects.filter(p=>grpOfP(p)===id);}
+function vProjects(){return GRP?grpProjects(GRP):DB.projects.slice();}
+function viewId(){return ALL?(GRP?'grp:'+GRP:'__all'):DB.current;}
+/* מה לפתוח אחרי טעינה / שחזור */
+function restoreViewId(){
+  const v=DB.view||'';
+  if(v.startsWith('grp:')&&grpById(v.slice(4))&&grpProjects(v.slice(4)).length) return v;
+  if(v==='all'&&DB.projects.length>1) return '__all';
+  return DB.current;
+}
+function grpLabel(id){const g=grpById(id);return g?g.name:'';}
+function grpOpts(sel){return '<option value="">— ללא קבלן —</option>'+grpDB().map(g=>`<option value="${g.id}"${g.id===sel?' selected':''}>${esc(g.name)}</option>`).join('')+'<option value="__new">+ קבלן חדש…</option>';}
+function grpAdd(name){
+  name=String(name||'').trim(); if(!name) return null;
+  const ex=grpDB().find(g=>normName(g.name)===normName(name)); if(ex) return ex.id;
+  const g={id:uid(),name,company:'',coId:'',contact:'',phone:'',email:'',notes:''};
+  // מילוי מספר הטלפונים לפי שם החברה
+  const b=(DB.book||[]).find(c=>c.co&&normName(c.co)===normName(name));
+  if(b){g.company=b.co;g.contact=b.name||'';g.phone=b.phone||'';g.email=b.email||'';}
+  grpDB().push(g); return g.id;
+}
+/* בחירת קבלן לפרויקט (מתוך בחירה עם "+ קבלן חדש") – מחזיר מזהה או undefined בביטול */
+function grpPick(v){
+  if(v!=='__new') return v;
+  const n=prompt('שם הקבלן החדש:'); if(!n||!n.trim()) return undefined;
+  return grpAdd(n);
+}
+function grpSetProject(p,gid){
+  if(!p) return; p.data.settings.group=gid||'';
+  if(!ALL&&p.id===DB.current) S.settings.group=gid||'';
+}
+function renderGroups(){
+  const t=$('#tGrp'); if(!t) return; const G=grpDB();
+  $('#dlGrpCo').innerHTML=[...new Set((DB.book||[]).map(c=>c.co).filter(Boolean))].slice(0,3000).map(c=>`<option value="${esc(c)}">`).join('');
+  t.innerHTML=!G.length?'<tbody><tr><td><div class="empty">עדיין אין קבלנים. הוסיפו קבלן ושייכו אליו פרויקטים בטבלה למטה.</div></td></tr></tbody>':
+    `<thead><tr><th>קבלן</th><th>שם החברה הרשמי</th><th>ח.פ.</th><th>איש קשר</th><th>טלפון</th><th>פרויקטים</th><th></th></tr></thead><tbody>`+
+    G.map(g=>{const n=grpProjects(g.id).length;return `<tr>
+      <td><input class="i" data-gf="name" data-gid="${g.id}" value="${esc(g.name)}" style="min-width:150px"></td>
+      <td><input class="i" data-gf="company" data-gid="${g.id}" value="${esc(g.company||'')}" placeholder="—" style="min-width:140px"></td>
+      <td><input class="i num" data-gf="coId" data-gid="${g.id}" value="${esc(g.coId||'')}" placeholder="—" style="width:105px"></td>
+      <td><input class="i" data-gf="contact" data-gid="${g.id}" value="${esc(g.contact||'')}" placeholder="—" style="min-width:110px"></td>
+      <td><input class="i num" data-gf="phone" data-gid="${g.id}" value="${esc(g.phone||'')}" placeholder="—" dir="ltr" style="width:115px"></td>
+      <td class="num">${n}</td>
+      <td style="white-space:nowrap">${n?`<button class="btn sm" data-gopen="${g.id}">📊 תזרים מאוחד</button> `:''}<button class="btn sm danger" data-gdel="${g.id}" title="מחיקת הקבלן (הפרויקטים נשארים, ללא קבלן)">✕</button></td></tr>`;}).join('')+'</tbody>';
+}
+function bindGroups(){
+  $('#btnNewGrp').onclick=()=>{const v=$('#newGrpName').value; const id=grpAdd(v); if(!id) return toast('כתבו שם קבלן');
+    $('#newGrpName').value=''; persist(); renderGroups(); renderProjList(); renderProjSel(); toast('הקבלן נוסף');};
+  $('#tGrp').addEventListener('change',e=>{const el=e.target.closest('[data-gf]'); if(!el) return; const g=grpById(el.dataset.gid); if(!g) return;
+    const v=el.value.trim(); if(el.dataset.gf==='name'&&!v){el.value=g.name;return;}
+    g[el.dataset.gf]=v; persist(); renderProjSel(); if(ALL){S=buildVirtual();render();} });
+  $('#tGrp').addEventListener('click',e=>{
+    const o=e.target.closest('[data-gopen]'); if(o){closeOv($('#ovProj'));switchProject('grp:'+o.dataset.gopen);return;}
+    const d=e.target.closest('[data-gdel]'); if(!d) return; const g=grpById(d.dataset.gdel); if(!g) return;
+    const n=grpProjects(g.id).length;
+    if(!confirm('למחוק את הקבלן «'+g.name+'»?'+(n?'\n'+n+' הפרויקטים שלו יישארו, ללא קבלן.':''))) return;
+    grpProjects(g.id).forEach(p=>grpSetProject(p,''));
+    DB.groups=grpDB().filter(x=>x.id!==g.id);
+    persist(); if(ALL&&GRP===g.id) switchProject(DB.current); renderGroups(); renderProjList(); renderProjSel();
+  });
+  $('#tProj').addEventListener('change',e=>{const el=e.target.closest('[data-pgrp]'); if(!el) return;
+    const p=DB.projects.find(x=>x.id===el.dataset.pgrp); const v=grpPick(el.value); if(v===undefined){renderProjList();return;}
+    grpSetProject(p,v); persist(); renderGroups(); renderProjList(); renderProjSel(); if(ALL){S=buildVirtual();render();}});
+  $('#sGroup').onchange=e=>{if(ALL)return; const v=grpPick(e.target.value); if(v===undefined){syncSettingsUI();return;}
+    S.settings.group=v||''; save(); syncSettingsUI(); renderProjSel(); toast(v?'הפרויקט שויך ל«'+grpLabel(v)+'»':'הפרויקט ללא קבלן');};
+}
 /* ---------- export ---------- */
 function dl(name,content,mime,bom){
   const b=new Blob([(bom?'﻿':'')+content],{type:mime||'text/csv;charset=utf-8'});
@@ -4974,7 +5064,7 @@ const AL_T={row:'שינוי סכום',add:'שורה חדשה',del:'שורה נמ
 
 /* ---------- ממשק: פעמון, חלון התראות, חלון אחרי שמירה, כרטיס בדשבורד ---------- */
 function alAll(){ // לכל הפרויקטים (לתצוגה המאוחדת)
-  return DB.projects.map(p=>({p,L:withProj(p,()=>alList())}));
+  return vProjects().map(p=>({p,L:withProj(p,()=>alList())}));
 }
 function alUI(){
   const btn=$('#btnAlerts'); if(!btn) return;
@@ -5111,7 +5201,7 @@ function rpChg(){
 const RP_TYPES=[['docs','מסמכי קבלנים וסגירת חשבון סופי'],['pay','תשלומים חודשי לספקים וקבלנים'],['inc','הכנסות חודשי (גבייה מלקוחות)'],['late','גבייה באיחור (חשבונות שמועדם עבר)'],['bal','יתרות לספקים וקבלנים'],['fc','תחזית מזומנים (3 / 6 / 12 חודשים)'],['ret','עיכבונות וערבויות'],['bud','בקרת תקציב לפי מלאכה וקבלן'],['chg','חריגות ושינויים (התראות ויומן)'],['idx','הצמדה למדד וחשיפה'],['exec','חשבונות ביצוע'],['units','מכירות ודירות'],['bank','ליווי בנקאי']];
 let RPT=null; // הדוח האחרון שהוצג (לייצוא)
 function withProj(p,fn){const keep=S;S=p.data;try{return fn();}finally{S=keep;}}
-function rpScope(){const v=$('#rpProj').value;return v==='__all'?DB.projects.slice():DB.projects.filter(p=>p.id===v);}
+function rpScope(){const v=$('#rpProj').value;return v==='__all'?DB.projects.slice():v.startsWith('grp:')?grpProjects(v.slice(4)):DB.projects.filter(p=>p.id===v);}
 const fmtD=d=>d?(d instanceof Date?d:new Date(d+'T12:00:00')).toLocaleDateString('he-IL'):'';
 function vatPair(amt,set){
   const v=(Number(set.vat)||0)/100, a=Number(amt)||0;
@@ -5388,7 +5478,7 @@ function renderReport(){
   $('#rpMonthL').textContent=t==='fc'?'מחודש':'חודש';
   $('#rpOpenL').textContent=t==='inc'?'כולל חשבונות פתוחים שמועד הגבייה שלהם עבר':'כולל תשלומים פתוחים מחודשים קודמים';
   const R=t==='pay'?rpMonthly('expense'):t==='inc'?rpMonthly('income'):t==='late'?rpLate():t==='fc'?rpForecast():t==='ret'?rpRet():t==='bud'?rpBud():t==='chg'?rpChg():t==='idx'?rpIdx():t==='exec'?rpExec():t==='units'?rpUnits():t==='docs'?rpDocs():t==='bank'?rpBank():rpBal();
-  const scope=rpScope(); R.sub=(scope.length>1?'כל הפרויקטים ('+scope.length+')':pname(scope[0]))+' · הופק ב-'+new Date().toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'});
+  const scope=rpScope(), rv=$('#rpProj').value, rg=rv.startsWith('grp:')?grpLabel(rv.slice(4)):''; R.sub=(rg?rg+' – '+(scope.length>1?scope.length+' פרויקטים: '+scope.map(pname).join(', '):scope.length?pname(scope[0]):'אין פרויקטים'):scope.length>1?'כל הפרויקטים ('+scope.length+')':pname(scope[0]))+' · הופק ב-'+new Date().toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'});
   RPT=R;
   const RC=R.cols.filter(c=>c[3]!=='xls'), nc=RC.length, sumOf=(rows,c)=>R.sumCols.includes(c[0])?cellTxt(c,r2(sumK(rows,c[0]))):'';
   let body='';
@@ -5440,14 +5530,17 @@ function bindReports(){
 }
 function rpSyncProj(){
   const sel=$('#rpProj'); if(!sel) return; const prev=sel.value;
-  sel.innerHTML=DB.projects.map(p=>`<option value="${p.id}">${esc(pname(p))}</option>`).join('')+(DB.projects.length>1?'<option value="__all">כל הפרויקטים יחד</option>':'');
-  sel.value=[...sel.options].some(o=>o.value===prev)?prev:(ALL?'__all':DB.current);
+  const G=grpDB().filter(g=>grpProjects(g.id).length);
+  sel.innerHTML=DB.projects.map(p=>`<option value="${p.id}">${esc(pname(p))}</option>`).join('')+
+    (G.length?'<optgroup label="לפי קבלן">'+G.map(g=>`<option value="grp:${g.id}">🏗 ${esc(g.name)} – כל הפרויקטים שלו (${grpProjects(g.id).length})</option>`).join('')+'</optgroup>':'')+
+    (DB.projects.length>1?'<option value="__all">כל הפרויקטים יחד</option>':'');
+  sel.value=[...sel.options].some(o=>o.value===prev)?prev:viewId();
 }
 
 /* ---------- nav ---------- */
 function go(v){
   if(ALL&&v!=='dash'&&v!=='reports'&&v!=='book') v='dash';
-  if(v==='reports'){rpSyncProj();$('#rpProj').value=ALL?'__all':DB.current;renderReport();}
+  if(v==='reports'){rpSyncProj();$('#rpProj').value=viewId();renderReport();}
   $$('#tabs .tab').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
   if(v==='dev'&&S.settings.ptype!=='dev') v='dash';
   if(v==='book') renderBook();
@@ -5590,7 +5683,8 @@ function bind(){
   // settings
   $('#projName').oninput=e=>{if(ALL)return;S.settings.projectName=e.target.value;save();renderProjSel();};
   $('#projSel').onchange=e=>switchProject(e.target.value);
-  $('#btnProjects').onclick=()=>{renderProjList();$('#ovProj').classList.add('on');};
+  bindGroups();
+  $('#btnProjects').onclick=()=>{renderProjList();renderGroups();$('#ovProj').classList.add('on');};
   $('#btnNewProj').onclick=()=>{const n=$('#newProjName').value.trim();if(!n){toast('הזינו שם לפרויקט');$('#newProjName').focus();return;}
     newProject(n);$('#newProjName').value='';$('#ovProj').classList.remove('on');go('in');toast('נוצר פרויקט «'+n+'»');};
   $('#newProjName').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnNewProj').click();});
@@ -5610,7 +5704,7 @@ function bind(){
       if(!confirm('למחוק את הפרויקט «'+pname(p)+'» וכל הנתונים שלו? מומלץ לגבות קודם.'))return;
       DB.projects=DB.projects.filter(y=>y.id!==p.id);
       if(DB.current===p.id) DB.current=DB.projects[0].id;
-      switchProject(ALL&&DB.projects.length>1?'__all':DB.current); renderProjList(); toast('הפרויקט נמחק');}
+      switchProject(ALL&&GRP&&grpProjects(GRP).length?'grp:'+GRP:ALL&&DB.projects.length>1?'__all':DB.current); renderProjList(); toast('הפרויקט נמחק');}
   });
   document.body.addEventListener('click',e=>{const a=e.target.closest('[data-open]');if(a){e.preventDefault();switchProject(a.dataset.open);}});
   const bindSet=(sel,key,num)=>$(sel).onchange=e=>{S.settings[key]=num?(Number(e.target.value)||0):e.target.value;save();render();};
@@ -5631,7 +5725,7 @@ function bind(){
       if(!o||typeof o!=='object'||Array.isArray(o)) throw new Error('מבנה קובץ שגוי');
       if(Array.isArray(o.projects)&&o.projects.length){
         if(!confirm('הקובץ מכיל '+o.projects.length+' פרויקטים. לשחזר אותו במקום כל הפרויקטים הנוכחיים?')) {e.target.value='';return;}
-        localStorage.setItem(LSM,JSON.stringify(o)); load(); switchProject(DB.view==='all'&&DB.projects.length>1?'__all':DB.current);
+        localStorage.setItem(LSM,JSON.stringify(o)); load(); switchProject(restoreViewId());
         toast('הגיבוי שוחזר: '+DB.projects.length+' פרויקטים');
       }else{ // גיבוי ישן של פרויקט בודד → נוסף כפרויקט חדש
         const id=uid(); const d=normalize(o); if(!d.settings.projectName)d.settings.projectName='פרויקט משוחזר';
@@ -5744,7 +5838,7 @@ function bind(){
 
 /* ---------- boot ---------- */
 load(); bind(); syncSettingsUI(); render(); drvBoot();
-if(DB.view==='all'&&DB.projects.length>1) switchProject('__all');
+{const rv=restoreViewId(); if(rv!==DB.current) switchProject(rv);}
 if(typeof Chart==='undefined') setTimeout(()=>{if(typeof Chart==='undefined')$('#chFallback').style.display='block';else render();},1500);
 window.CF={openFc,saveFc,budFix,openRow,smRun,smItem,smApply,renderSmart,aiCfg,aiSet,get SM(){return SM;},alList,alTrack,openAlerts,idxCalc,idxDiff,idxDB,ecCalc,ecApply,devApply,devBankSim,devD,fxApply,openEc,renderExec,get S(){return S;},get DRV(){return DRV;},drvSync,drvSyncFiles,dirLookup,fget,openParty,classifyTrade,budParties,openSpread,get DB(){return DB;},switchProject,newProject,compute,payDate,parseNum,parseDate,parseTerms,parseDelimited,demo,save,render,
   add(type,o){rowsOf(type).push(Object.assign({id:uid(),status:'צפוי',terms:'',basis:'',actualAmount:'',actualDate:''},o));save();render();}};
